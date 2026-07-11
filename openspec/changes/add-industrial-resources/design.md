@@ -67,3 +67,39 @@ Feed now fills that conceptual slot properly.
 
 Each **assigned** (not idle) worker consumes a small amount of egg
 over time, village-wide (not per-building):
+EGG_UPKEEP_PER_WORKER_PER_MINUTE = 0.5
+New `upkeep.js` module, timestamp-based accrual (same offline-safe
+pattern as resource production):
+```js
+function applyUpkeep(upkeepState, resourceState, workerState, now) {
+  const elapsedMinutes = (now - upkeepState.lastCheckedAt) / 60000;
+  const totalAssigned = getTotalAssigned(workerState);
+  const consumed = Math.floor(elapsedMinutes * totalAssigned * EGG_UPKEEP_PER_WORKER_PER_MINUTE);
+  if (consumed > 0) {
+    resourceState.carried.egg = Math.max(0, resourceState.carried.egg - consumed);
+    upkeepState.lastCheckedAt = now;
+  }
+}
+```
+Called once per frame in the main loop (cheap check, only actually
+deducts once enough time has passed to consume ≥1 egg). Egg is
+clamped at 0 — never goes negative. **No consequence for hitting 0
+yet** — that's explicitly deferred pending a proper design pass on
+what "unfed workers" should actually do (production penalty? Something
+else?). Shown in the HUD egg tooltip once egg reaches 0, so players
+at least see it's happening.
+
+## Feathers
+
+No functional change in this proposal. Documented intent only:
+feathers become hero-crafting material once a hero system exists.
+Revisit when that system is actually designed.
+
+## Risks / Open Questions
+- Upkeep rate (0.5 egg/worker/min) is a guess — will need real
+  playtesting once population reaches the 40-50 range, where the
+  drain compounds fast. Flagged for tuning, not blocking.
+- Ore's unlock cost requiring stone (30) means Mine can't be unlocked
+  the same session Quarry is, by design (keeps ore feeling like a
+  genuine "later" resource) — confirm this pacing feels right once
+  playtested, not just reasoned about on paper.

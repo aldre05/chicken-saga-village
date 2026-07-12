@@ -67,7 +67,11 @@ Feed now fills that conceptual slot properly.
 
 Each **assigned** (not idle) worker consumes a small amount of egg
 over time, village-wide (not per-building):
+
+```
 EGG_UPKEEP_PER_WORKER_PER_MINUTE = 0.5
+```
+
 New `upkeep.js` module, timestamp-based accrual (same offline-safe
 pattern as resource production):
 ```js

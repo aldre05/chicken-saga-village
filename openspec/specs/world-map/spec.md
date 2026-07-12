@@ -17,6 +17,18 @@
   radius, and dialogue text (map.js).
 - Only the tiles within the current camera viewport are drawn each
   frame (render.js `drawVisibleTiles`), not the whole map.
+- 13 buildings currently placed, clustered by type: 6 resource
+  buildings (Old Coop, Nest Bundle, Woodshed, Rice Paddy, Quarry,
+  Mine) in one area, 5 houses in another, Town Hall + Workbench +
+  Farmer Joe placed centrally. Every placement is collision-verified
+  programmatically (no overlaps, nothing on solid tiles) before
+  shipping — this check has caught real placement bugs multiple
+  times and should keep being run for any new building.
+- **Exception**: the Lucky Wheel is NOT on the map — it's a fixed
+  screen UI widget, not a walkable interactable (see lucky-wheel
+  spec). Building-level labels (e.g. "Old Coop (Lvl 3)") are drawn
+  above each interactable that has a level, sourced live from
+  `buildingLevels` state passed into the render call.
 
 ## Constraints for future changes
 - Tile IDs and solidity must stay defined in tileConfig.js, not

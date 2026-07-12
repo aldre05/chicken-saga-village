@@ -1,0 +1,506 @@
+@import url('https://fonts.googleapis.com/css2?family=Rye&family=IBM+Plex+Mono:wght@500;600&family=Source+Sans+3:wght@400;600&display=swap');
+
+:root {
+  --barnwood: #2b1d14;
+  --panel-wood: #3d2b1f;
+  --egg-gold: #e8b84b;
+  --egg-gold-bright: #f4ce6e;
+  --rust-red: #a64b3a;
+  --parchment: #f2e8d2;
+  --parchment-dim: #c9bc9f;
+  --divider: #5a4432;
+
+  --font-display: 'Rye', serif;
+  --font-body: 'Source Sans 3', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--barnwood);
+  color: var(--parchment);
+  font-family: var(--font-body);
+  min-height: 100vh;
+}
+
+.fan-notice {
+  background: var(--rust-red);
+  color: var(--parchment);
+  text-align: center;
+  font-size: 0.8rem;
+  padding: 6px 12px;
+}
+
+.game-header {
+  text-align: center;
+  padding: 16px 20px 4px;
+}
+.game-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  color: var(--egg-gold-bright);
+  margin: 0 0 4px;
+  text-shadow: 2px 2px 0 rgba(0,0,0,0.35);
+}
+.controls-hint {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--parchment-dim);
+  margin: 0;
+}
+
+.hud {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.hud-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--panel-wood);
+  border: 1px solid var(--divider);
+  border-radius: 20px;
+  padding: 6px 14px;
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--egg-gold-bright);
+}
+.hud-chip-locked {
+  opacity: 0.5;
+  color: var(--parchment-dim);
+}
+.hud-icon { font-size: 1.05rem; }
+.hud-label-small { font-size: 0.7rem; }
+
+.worker-hud-chip {
+  display: inline-flex;
+  margin-top: 6px;
+}
+
+.header-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.auto-claim-btn {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: var(--egg-gold);
+  color: var(--barnwood);
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.auto-claim-btn:hover { background: var(--egg-gold-bright); }
+.auto-claim-btn:active { transform: translateY(1px); }
+
+.building-panel {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(20, 14, 10, 0.94);
+  border: 1px solid var(--egg-gold);
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 40;
+  min-width: 220px;
+}
+.building-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.panel-building-name {
+  font-family: var(--font-display);
+  color: var(--egg-gold-bright);
+  font-size: 1rem;
+}
+.panel-building-level {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+}
+.panel-rate {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--parchment);
+}
+.panel-rate.zero-rate { color: var(--rust-red-bright); }
+
+.building-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-row-label {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--parchment);
+  flex: 1;
+}
+.worker-panel-count {
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  color: var(--egg-gold-bright);
+  min-width: 42px;
+  text-align: center;
+}
+.worker-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: var(--egg-gold);
+  color: var(--barnwood);
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  line-height: 1;
+}
+.worker-btn:hover:not(:disabled) { background: var(--egg-gold-bright); }
+.worker-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.upgrade-btn {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.78rem;
+  background: var(--rust-red);
+  color: var(--parchment);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.upgrade-btn:hover:not(:disabled) { background: var(--rust-red-bright); }
+.upgrade-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.upgrade-preview {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+  flex: 1;
+}
+
+.floating-popup {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--egg-gold-bright);
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+  pointer-events: none;
+  animation: floatPopupAnim 1.2s ease-out forwards;
+  z-index: 50;
+}
+@keyframes floatPopupAnim {
+  0% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(-40px); opacity: 0; }
+}
+
+.game-wrap {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.canvas-frame {
+  position: relative;
+  border: 3px solid var(--divider);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+#gameCanvas {
+  display: block;
+  background: #1c2b1a;
+}
+
+.hidden { display: none !important; }
+
+.interact-prompt {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 14, 10, 0.85);
+  border: 1px solid var(--egg-gold);
+  color: var(--egg-gold-bright);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  padding: 8px 16px;
+  border-radius: 6px;
+}
+
+.dialogue-box {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--panel-wood);
+  border-top: 3px solid var(--egg-gold);
+  padding: 16px 20px;
+}
+.dialogue-title {
+  font-family: var(--font-display);
+  color: var(--egg-gold-bright);
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+}
+.dialogue-text {
+  font-size: 0.95rem;
+  color: var(--parchment);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+.dialogue-hint {
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+}
+
+/* ---------- Fixed Lucky Wheel widget ---------- */
+.lucky-wheel-widget {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--panel-wood);
+  border: 2px solid var(--egg-gold);
+  border-radius: 30px;
+  padding: 10px 18px 10px 10px;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: transform 0.15s ease;
+}
+.lucky-wheel-widget:hover { transform: scale(1.05); }
+.lucky-wheel-widget-icon {
+  font-size: 1.8rem;
+  animation: wheelIdleSpin 6s linear infinite;
+}
+@keyframes wheelIdleSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.lucky-wheel-widget-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.lucky-wheel-tickets {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--egg-gold-bright);
+}
+.lucky-wheel-countdown {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+}
+
+/* ---------- Lucky Wheel modal ---------- */
+.lucky-wheel-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 6, 4, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.lucky-wheel-modal-content {
+  position: relative;
+  background: var(--panel-wood);
+  border: 3px solid var(--egg-gold);
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 90vw;
+}
+.lucky-wheel-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--parchment-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.lucky-wheel-close-btn:hover { color: var(--egg-gold-bright); }
+.lucky-wheel-modal-title {
+  font-family: var(--font-display);
+  color: var(--egg-gold-bright);
+  margin: 0;
+}
+
+.wheel-frame {
+  position: relative;
+  width: 260px;
+  height: 260px;
+}
+.wheel-pointer {
+  position: absolute;
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 1.6rem;
+  color: var(--egg-gold-bright);
+  z-index: 10;
+  filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6));
+}
+.wheel-dial {
+  width: 260px;
+  height: 260px;
+  border-radius: 50%;
+  border: 6px solid var(--egg-gold);
+  position: relative;
+  transition: transform 4s cubic-bezier(0.15, 0.85, 0.25, 1);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+}
+.wheel-segment-label {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 60px;
+  text-align: center;
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #241a12;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.3);
+  transform-origin: 0 0;
+  pointer-events: none;
+}
+.wheel-segment-label .seg-icon { font-size: 1.1rem; display: block; }
+
+.wheel-result-text {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  color: var(--egg-gold-bright);
+  min-height: 1.4em;
+  text-align: center;
+}
+.wheel-ticket-info {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--parchment-dim);
+}
+.wheel-spin-btn {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  background: var(--egg-gold);
+  color: var(--barnwood);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 40px;
+  cursor: pointer;
+}
+.wheel-spin-btn:hover:not(:disabled) { background: var(--egg-gold-bright); }
+.wheel-spin-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ---------- Crafting panel ---------- */
+.crafting-panel {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 14, 10, 0.94);
+  border: 1px solid var(--egg-gold);
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 40;
+  min-width: 260px;
+  max-width: 90%;
+}
+.crafting-panel-title {
+  font-family: var(--font-display);
+  color: var(--egg-gold-bright);
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+.crafting-recipe-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.crafting-recipe-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel-wood-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.crafting-recipe-info {
+  display: flex;
+  flex-direction: column;
+}
+.crafting-recipe-name {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--parchment);
+  font-weight: 600;
+}
+.crafting-recipe-cost {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+}
+.crafting-craft-btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--egg-gold);
+  color: var(--barnwood);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crafting-craft-btn:hover:not(:disabled) { background: var(--egg-gold-bright); }
+.crafting-craft-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.cost-insufficient {
+  color: var(--rust-red-bright);
+  font-weight: 700;
+}
+
+.hud-chip-warning {
+  border-color: var(--rust-red-bright);
+  animation: hudWarningPulse 1.5s ease-in-out infinite;
+}
+@keyframes hudWarningPulse {
+  0%, 100% { background: var(--panel-wood); }
+  50% { background: rgba(166, 75, 58, 0.4); }
+}

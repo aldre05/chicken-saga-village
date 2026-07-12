@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chicken Village (MVP)</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="fan-notice">🐔 Unofficial fan project — not affiliated with any other game. Placeholder art — real tileset coming soon.</div>
+
+<header class="game-header">
+  <h1 class="game-title">Chicken Village</h1>
+  <p class="controls-hint">WASD / Arrow keys to move · E to interact · click +/− (or F/G) to assign workers</p>
+  <div id="resourceHud" class="hud"></div>
+  <div class="header-row">
+    <div id="workerHud" class="hud-chip worker-hud-chip"></div>
+    <button id="autoClaimBtn" class="auto-claim-btn">⚡ Auto-Claim All</button>
+  </div>
+</header>
+
+<main class="game-wrap">
+  <div class="canvas-frame">
+    <canvas id="gameCanvas"></canvas>
+    <div id="interactPrompt" class="interact-prompt hidden"></div>
+    <div id="buildingPanel" class="building-panel hidden">
+      <div class="building-panel-header">
+        <span id="panelBuildingName" class="panel-building-name"></span>
+        <span id="panelBuildingLevel" class="panel-building-level"></span>
+      </div>
+      <div id="panelRate" class="panel-rate"></div>
+      <div class="building-panel-row">
+        <span class="panel-row-label">👷 Workers</span>
+        <button id="workerMinusBtn" class="worker-btn">−</button>
+        <span id="workerPanelCount" class="worker-panel-count"></span>
+        <button id="workerPlusBtn" class="worker-btn">+</button>
+      </div>
+      <div class="building-panel-row">
+        <button id="upgradeBtn" class="upgrade-btn">Upgrade</button>
+        <span id="upgradePreview" class="upgrade-preview"></span>
+      </div>
+    </div>
+    <div id="craftingPanel" class="crafting-panel hidden">
+      <div class="crafting-panel-title">🔨 Craft</div>
+      <div id="craftingRecipeList" class="crafting-recipe-list"></div>
+    </div>
+    <div id="dialogueBox" class="dialogue-box hidden">
+      <div id="dialogueTitle" class="dialogue-title"></div>
+      <div id="dialogueText" class="dialogue-text"></div>
+      <div class="dialogue-hint">Press E or Esc to close</div>
+    </div>
+  </div>
+</main>
+
+<!-- Fixed Lucky Wheel widget — not a walkable building, always clickable -->
+<div id="luckyWheelWidget" class="lucky-wheel-widget hidden">
+  <div class="lucky-wheel-widget-icon">🎡</div>
+  <div class="lucky-wheel-widget-info">
+    <span id="luckyWheelTickets" class="lucky-wheel-tickets"></span>
+    <span id="luckyWheelCountdown" class="lucky-wheel-countdown"></span>
+  </div>
+</div>
+
+<!-- Lucky Wheel spin modal -->
+<div id="luckyWheelModal" class="lucky-wheel-modal hidden">
+  <div class="lucky-wheel-modal-content">
+    <button id="luckyWheelCloseBtn" class="lucky-wheel-close-btn">✕</button>
+    <h2 class="lucky-wheel-modal-title">🎡 Lucky Wheel</h2>
+    <div class="wheel-frame">
+      <div class="wheel-pointer">▼</div>
+      <div id="wheelDial" class="wheel-dial"></div>
+    </div>
+    <div id="wheelResultText" class="wheel-result-text"></div>
+    <div id="wheelTicketInfo" class="wheel-ticket-info"></div>
+    <button id="wheelSpinBtn" class="wheel-spin-btn">SPIN</button>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

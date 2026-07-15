@@ -8,7 +8,7 @@ import { loadGameState, saveGameState } from './gameState.js';
 import { HANDLERS, BUILDING_RESOURCE } from './interactionHandlers.js';
 import { RESOURCE_CONFIG, isResourceUnlocked, collectFromBuilding, getEffectiveRatePerSecond, getBuildingStored } from './resources.js';
 import { assignWorker, unassignWorker, getIdleWorkers } from './workers.js';
-import { isBuildingUnlocked } from './buildingUnlocks.js';
+import { isBuildingUnlocked, UNLOCK_CONFIG, unlockBuilding } from './buildingUnlocks.js';
 import { applyUpkeep } from './upkeep.js';
 import {
   getMaxWorkers, getRateMultiplier, getCapMultiplier, rateMultiplierForLevel, getUpgradeCost, canUpgradeBuilding, upgradeBuilding,
@@ -171,17 +171,20 @@ upgradeBtn.addEventListener('click', () => {
   if (!currentTarget) return;
   const { kind, buildingId, buildingObj } = currentTarget;
 
-  let ok, newLevelText;
-  if (kind === 'townhall') {
+  let ok, resultText;
+  if (kind === 'locked') {
+    ok = unlockBuilding(gameState.buildingUnlocks, buildingId, gameState.townHall.level, gameState.resources);
+    resultText = 'Unlocked! 🔓';
+  } else if (kind === 'townhall') {
     ok = canUpgradeTownHall(gameState.townHall, gameState.resources) && upgradeTownHall(gameState.townHall, gameState.resources);
-    newLevelText = `Lv.${gameState.townHall.level}`;
+    resultText = `Upgraded! Lv.${gameState.townHall.level} ⬆️`;
   } else {
-    ok = upgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
-    newLevelText = `Lv.${gameState.buildingLevels[buildingId]}`;
+    ok = upgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
+    resultText = `Upgraded! Lv.${gameState.buildingLevels[buildingId]} ⬆️`;
   }
 
   if (ok) {
-    spawnFloatingPopup(`Upgraded! ${newLevelText} ⬆️`, buildingObj.x + buildingObj.width / 2, buildingObj.y);
+    spawnFloatingPopup(resultText, buildingObj.x + buildingObj.width / 2, buildingObj.y);
   } else {
     spawnFloatingPopup("Can't afford it", buildingObj.x + buildingObj.width / 2, buildingObj.y);
   }
@@ -268,32 +271,42 @@ function buildWheelSegments() {
 }
 
 function buildWheelDialVisual() {
-  const DIVIDER_WIDTH_DEG = 1.5;
-  const DIVIDER_COLOR = '#2b1d14'; // barnwood — reads as a clean line between wedges
-
-  const stops = [];
-  wheelSegments.forEach((s, i) => {
-    // Shrink each segment slightly at both edges to make room for a
-    // divider line, so segments never directly abut one another.
-    const start = s.startAngle + (i === 0 ? 0 : DIVIDER_WIDTH_DEG / 2);
-    const end = s.endAngle - DIVIDER_WIDTH_DEG / 2;
-    stops.push(`${s.color} ${start}deg ${end}deg`);
-    if (i < wheelSegments.length - 1) {
-      stops.push(`${DIVIDER_COLOR} ${end}deg ${end + DIVIDER_WIDTH_DEG}deg`);
-    }
-  });
-  // Divider between the last and first segment (wheel wraps around).
-  stops.push(`${DIVIDER_COLOR} ${360 - DIVIDER_WIDTH_DEG / 2}deg 360deg`);
-  stops.push(`${DIVIDER_COLOR} 0deg ${DIVIDER_WIDTH_DEG / 2}deg`);
-
-  wheelDialEl.style.background = `conic-gradient(${stops.join(', ')})`;
+  // Plain alternating colors — no thin gradient "divider bands" here.
+  // A previous version tried 1.5deg-wide divider bands baked into the
+  // conic-gradient itself, but thin angular bands like that can
+  // anti-alias into near-invisibility depending on the browser/GPU.
+  // Real DOM line elements (below) are far more reliable.
+  const gradientStops = wheelSegments.map(s => `${s.color} ${s.startAngle}deg ${s.endAngle}deg`).join(', ');
+  wheelDialEl.style.background = `conic-gradient(${gradientStops})`;
 
   wheelDialEl.innerHTML = '';
-  const radius = 90; // px from center to label position
+  const labelRadius = 90; // px from center to label position
+  const dividerLength = 130; // px, half the wheel's diameter (260px)
+
+  // Divider lines — one per segment boundary, as actual rotated line
+  // elements rather than gradient bands.
+  for (const seg of wheelSegments) {
+    const divider = document.createElement('div');
+    divider.className = 'wheel-divider-line';
+    divider.style.height = dividerLength + 'px';
+    divider.style.transform = `rotate(${seg.startAngle}deg)`;
+    wheelDialEl.appendChild(divider);
+  }
+
+  // Segment labels. Bug fix: the offset that determines "how far
+  // outward" a label sits must be the Y component of translate (since
+  // rotate(0deg) = straight up, matching conic-gradient's 0deg
+  // reference), not the X component — using translate(radius, -12px)
+  // placed every label near the 90deg/3-o'clock position *before*
+  // rotation was even applied, so after rotating by midAngle every
+  // label landed roughly 90deg away from its actual segment. That's
+  // what caused rewards to visually not match their wedge.
+  const labelWidth = 60;
   for (const seg of wheelSegments) {
     const label = document.createElement('div');
     label.className = 'wheel-segment-label';
-    label.style.transform = `rotate(${seg.midAngle}deg) translate(${radius}px, -12px)`;
+    label.style.width = labelWidth + 'px';
+    label.style.transform = `rotate(${seg.midAngle}deg) translate(${-labelWidth / 2}px, -${labelRadius}px)`;
     label.innerHTML = `<span class="seg-icon">${RESOURCE_CONFIG[seg.resource].icon}</span>+${seg.amount}`;
     wheelDialEl.appendChild(label);
   }
@@ -420,7 +433,7 @@ function updatePromptUI(nearest) {
     const resourceId = BUILDING_RESOURCE[nearest.id];
     if (resourceId) {
       if (!isBuildingUnlocked(gameState.buildingUnlocks, nearest.id)) {
-        promptEl.textContent = `${nearest.name} — press E to unlock`;
+        promptEl.textContent = `${nearest.name} — see requirements below`;
       } else if (!isResourceUnlocked(resourceId, gameState.townHall.level)) {
         promptEl.textContent = `${nearest.name} — requires Town Hall level ${RESOURCE_CONFIG[resourceId].unlockedAtTownHall}`;
       } else {
@@ -438,7 +451,7 @@ function updatePromptUI(nearest) {
       }
     } else if (isHouse(nearest.id)) {
       if (!isBuildingUnlocked(gameState.buildingUnlocks, nearest.id)) {
-        promptEl.textContent = `${nearest.name} — press E to unlock`;
+        promptEl.textContent = `${nearest.name} — see requirements below`;
       } else {
         promptEl.textContent = `Press E to interact with ${nearest.name}`;
       }
@@ -505,21 +518,45 @@ function updateBuildingPanel(nearest) {
   const resourceId = BUILDING_RESOURCE[nearest.id];
   const isHouseBuilding = isHouse(nearest.id);
   const isTownHall = nearest.id === 'town_hall';
+  const isWorkbench = nearest.id === 'workbench';
 
-  if (!resourceId && !isHouseBuilding && !isTownHall) {
+  if (!resourceId && !isHouseBuilding && !isTownHall && !isWorkbench) {
     panelEl.classList.add('hidden');
     currentTarget = null;
     return;
   }
 
   const buildingId = nearest.id;
+  panelNameEl.textContent = nearest.name;
+
+  // --- Locked: show requirements + an Unlock button, same pattern as
+  // upgrading. Applies to resource buildings, houses, and Workbench —
+  // Town Hall has no lock state, it's always available. ---
   if (!isTownHall && !isBuildingUnlocked(gameState.buildingUnlocks, buildingId)) {
-    panelEl.classList.add('hidden');
-    currentTarget = null;
+    currentTarget = { kind: 'locked', buildingId, buildingObj: nearest };
+
+    const unlockCfg = UNLOCK_CONFIG[buildingId];
+    panelLevelEl.textContent = '🔒 Locked';
+
+    if (gameState.townHall.level < unlockCfg.requiresTownHall) {
+      panelRateEl.textContent = `Requires Town Hall level ${unlockCfg.requiresTownHall}`;
+      panelRateEl.classList.add('zero-rate');
+      upgradeBtn.disabled = true;
+      upgradePreviewEl.textContent = '';
+    } else {
+      panelRateEl.textContent = 'Meets Town Hall requirement';
+      panelRateEl.classList.remove('zero-rate');
+      upgradeBtn.disabled = !canAffordCost(unlockCfg.cost);
+      upgradePreviewEl.innerHTML = formatCostHTML(unlockCfg.cost);
+    }
+
+    workerRowEl.classList.add('hidden');
+    upgradeBtn.textContent = 'Unlock';
+    panelEl.classList.remove('hidden');
     return;
   }
 
-  panelNameEl.textContent = nearest.name;
+  upgradeBtn.textContent = 'Upgrade';
 
   if (isTownHall) {
     currentTarget = { kind: 'townhall', buildingId, buildingObj: nearest };
@@ -543,7 +580,14 @@ function updateBuildingPanel(nearest) {
     return;
   }
 
-  const now = Date.now();
+  if (isWorkbench) {
+    // Unlocked Workbench doesn't use this panel at all — the crafting
+    // panel (updateCraftingPanel) handles it entirely.
+    panelEl.classList.add('hidden');
+    currentTarget = null;
+    return;
+  }
+
   const level = gameState.buildingLevels[buildingId] || 1;
   panelLevelEl.textContent = `Lv.${level}`;
 
@@ -561,9 +605,9 @@ function updateBuildingPanel(nearest) {
       upgradeBtn.disabled = true;
       upgradePreviewEl.textContent = 'Max capacity reached';
     } else {
-      const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels);
+      const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels, gameState.townHall.level);
       const nextCapacity = getHouseCapacity(buildingId, { ...gameState.buildingLevels, [buildingId]: level + 1 });
-      upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
+      upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
       upgradePreviewEl.innerHTML = `${formatCostHTML(upgradeCost)} → ${nextCapacity} workers`;
     }
   } else {
@@ -588,15 +632,19 @@ function updateBuildingPanel(nearest) {
     workerMinusBtn.disabled = assigned <= 0;
     workerPlusBtn.disabled = assigned >= maxWorkers || idleWorkers <= 0;
 
-    const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels);
+    const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels, gameState.townHall.level);
     const nextLevelRate = getEffectiveRatePerSecond(resourceId, assigned, rateMultiplierForLevel(level + 1)) * 60;
-    upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
+    upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
     upgradePreviewEl.innerHTML = assigned > 0
       ? `${formatCostHTML(upgradeCost)} → ${Math.round(nextLevelRate)}/min`
       : `${formatCostHTML(upgradeCost)} → Lv.${level + 1}`;
   }
 
   panelEl.classList.remove('hidden');
+}
+
+function canAffordCost(costDict) {
+  return Object.entries(costDict).every(([id, amt]) => gameState.resources.carried[id] >= amt);
 }
 
 function updateDialogueUI() {

@@ -386,6 +386,17 @@ body {
   transition: transform 4s cubic-bezier(0.15, 0.85, 0.25, 1);
   box-shadow: 0 4px 16px rgba(0,0,0,0.5);
 }
+.wheel-divider-line {
+  position: absolute;
+  top: calc(50% - 130px);
+  left: calc(50% - 1px);
+  width: 2px;
+  height: 130px;
+  background: rgba(43, 29, 20, 0.85); /* barnwood, semi-opaque so it reads as a clean line */
+  transform-origin: center bottom; /* pivot at the wheel's center point */
+  pointer-events: none;
+}
+
 .wheel-segment-label {
   position: absolute;
   top: 50%;
@@ -430,7 +441,7 @@ body {
 /* ---------- Crafting panel ---------- */
 .crafting-panel {
   position: absolute;
-  bottom: 16px;
+  bottom: 56px;
   left: 50%;
   transform: translateX(-50%);
   background: rgba(20, 14, 10, 0.94);

@@ -9,7 +9,7 @@
 import { collectFromBuilding, RESOURCE_CONFIG, isResourceUnlocked } from './resources.js';
 import { getUpgradeCost as getTownHallUpgradeCost, MAX_TOWN_HALL_LEVEL } from './townHall.js';
 import { getIdleWorkers } from './workers.js';
-import { UNLOCK_CONFIG, isBuildingUnlocked, meetsTownHallRequirement, unlockBuilding } from './buildingUnlocks.js';
+import { UNLOCK_CONFIG, isBuildingUnlocked, meetsTownHallRequirement } from './buildingUnlocks.js';
 import { getMaxWorkers, getRateMultiplier, getCapMultiplier, getHouseCapacity, isHouseMaxed, HOUSE_IDS } from './buildingLevels.js';
 import { getReadyToClaimQuests, getAvailableQuests, claimQuest } from './questBoard.js';
 
@@ -45,10 +45,7 @@ function makeResourceBuildingHandler(buildingId, resourceId) {
         if (!meetsTownHallRequirement(buildingId, gameState.townHall.level)) {
           return { title: cfg.name, text: `Requires Town Hall level ${unlockCfg.requiresTownHall} to unlock.` };
         }
-        if (unlockBuilding(gameState.buildingUnlocks, buildingId, gameState.townHall.level, gameState.resources)) {
-          return { title: cfg.name, text: `Unlocked! Spent ${formatCost(unlockCfg.cost)}.` };
-        }
-        return { title: cfg.name, text: `Needs ${formatCost(unlockCfg.cost)} to unlock.` };
+        return { title: cfg.name, text: `Needs ${formatCost(unlockCfg.cost)} to unlock. Use the Unlock button.` };
       }
 
       if (!isResourceUnlocked(resourceId, gameState.townHall.level)) {
@@ -97,10 +94,7 @@ function makeHouseHandler(houseId) {
         if (!meetsTownHallRequirement(houseId, gameState.townHall.level)) {
           return { title: displayName, text: `Requires Town Hall level ${unlockCfg.requiresTownHall} to unlock.` };
         }
-        if (unlockBuilding(gameState.buildingUnlocks, houseId, gameState.townHall.level, gameState.resources)) {
-          return { title: displayName, text: `Unlocked! Spent ${formatCost(unlockCfg.cost)}.` };
-        }
-        return { title: displayName, text: `Needs ${formatCost(unlockCfg.cost)} to unlock.` };
+        return { title: displayName, text: `Needs ${formatCost(unlockCfg.cost)} to unlock. Use the Unlock button.` };
       }
 
       const level = gameState.buildingLevels[houseId] || 1;
@@ -149,10 +143,7 @@ export const HANDLERS = {
         if (!meetsTownHallRequirement('workbench', gameState.townHall.level)) {
           return { title: 'Workbench', text: `Requires Town Hall level ${unlockCfg.requiresTownHall} to unlock.` };
         }
-        if (unlockBuilding(gameState.buildingUnlocks, 'workbench', gameState.townHall.level, gameState.resources)) {
-          return { title: 'Workbench', text: `Unlocked! Spent ${formatCost(unlockCfg.cost)}. Use the crafting panel to pick what to make.` };
-        }
-        return { title: 'Workbench', text: `Needs ${formatCost(unlockCfg.cost)} to unlock.` };
+        return { title: 'Workbench', text: `Needs ${formatCost(unlockCfg.cost)} to unlock. Use the Unlock button.` };
       }
 
       return { title: 'Workbench', text: "Use the crafting panel below to pick what you'd like to make." };

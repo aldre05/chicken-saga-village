@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-12_
+_Last updated: 2026-07-15_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,130 +10,115 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-**Repo is in sync with the actual codebase** (verified by cloning the
-repo and diffing every file against the latest local build — zero
-differences). An earlier session flagged the repo as missing all
-code; that's been resolved. OpenSpec is also caught up: every
-implemented change has been archived into `openspec/specs/`, and all
-fully-shipped change folders under `openspec/changes/` have been
-removed. `openspec/changes/` is currently empty — no proposal is
-mid-flight.
+Repo was confirmed in sync with the codebase last session (full diff,
+zero differences). This session was a bug-fix + rebalance pass on top
+of that — not yet re-verified against the repo, since the fixed code
+hasn't been uploaded yet. **Upload the latest zip before starting any
+new session.**
 
 ## Active Tasks
-None blocking. Project is between features — see Next Recommended
-Task for candidates.
+1. **Upload this session's fixes to the repo** (see Session Log) —
+   nothing pushed yet, only delivered as a zip.
+2. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
+   root-caused and fixed via code reasoning, not visual testing —
+   worth confirming they look right in an actual browser).
+3. Archive this session's changes into `openspec/` (no proposal was
+   drafted for this batch — it was a rapid bug-fix pass in response
+   to direct playtesting feedback, not a planned feature. Worth a
+   short retroactive change note at minimum.)
 
 ## Completed (chronological, high-level)
-1. **Village MVP** — tile-based world, WASD movement, collision,
-   camera, interaction/dialogue system. Art is placeholder (flat
-   colored rectangles + hand-drawn pixel sprite for the player
-   character) — Kenney.nl CC0 tileset recommended for real art,
-   never integrated.
-2. **Resource economy build-out** — started at 1 resource (egg) with
-   a linear quest chain, grew to: 6 resources total (Egg, Feathers,
-   Wood, Rice [renamed from Grain], Stone, Ore), Town Hall progression
-   (5 levels), building unlock system (walk up + pay cost, TH-gated),
-   unlimited building leveling (tiered rate scaling, steep separate
-   cap scaling, +4 worker slots/level up to 50 max), 5 independently-
-   levelable houses (2-10 capacity each, unlocked 1-per-TH-level).
-3. **Farmer Joe became a real quest board** — 9 quests with resource
-   rewards, auto-claims completed ones, removes them from the list
-   permanently. (Market Stall was removed early on as redundant once
-   this existed.)
-4. **Lucky Wheel** — redesigned from a walkable building into a fixed
-   screen widget with a real animated spinning-wheel modal, odds-
-   proportional segments, ticket accrual (currently 1/min — a
-   TESTING value, meant to be 1/hour for real use), rewards that
-   scale with Town Hall level.
-5. **Crafting** — Workbench has a real recipe-picker panel (player
-   chooses what to craft; an earlier version auto-picked the "best"
-   recipe, replaced because it removed player agency). 6 recipes:
-   2 decorative (Nest Charm, Basket) + 4 industrial refined goods
-   (Chicken Feed, Plank, Brick, Ingot) added in the most recent batch.
-6. **Egg upkeep** — assigned workers now drain egg over time
-   (village-wide, not per-building). No penalty yet for hitting 0 —
-   deliberately deferred, needs its own design pass.
-7. **Several real bugs caught and fixed along the way** (worth
-   knowing about since they reflect real fragility points in this
-   codebase):
-   - A building-id vs. resource-id string mismatch caused silently
-     wrong worker caps/costs (caught via simulation testing, not
-     visually).
-   - A missing re-exported function caused the entire game to fail
-     silently on load (blank screen, no console-visible error) — now
-     always verified via a full import-graph trace before delivery,
-     not just per-file syntax checks.
-   - The interaction-radius system used center-to-center distance,
-     which broke down for large buildings (Town Hall reachable from
-     only one side) — fixed to edge-to-point distance.
-   - The resource HUD hid resource counts behind a lock icon based on
-     a building's production-gate status, even when the player
-     actually had that resource from another source (Lucky Wheel) —
-     misled the player into thinking crafting was broken when it
-     wasn't.
+See prior entries for the full build history (village MVP → resource
+economy → quest board/Lucky Wheel/crafting → industrial resources).
+This session added:
+
+1. **Root-caused and fixed two real Lucky Wheel bugs**, not just
+   symptom patches:
+   - Segment dividers were invisible — a previous fix tried thin
+     (1.5°) divider bands baked into the conic-gradient, which
+     apparently render inconsistently (likely anti-aliased away).
+     Replaced with actual DOM line elements, one per segment
+     boundary, which don't have that failure mode.
+   - Reward mismatch ("I see egg, but it says I won something else")
+     — the actual bug was a coordinate-math error in label placement:
+     `translate(radius, -12px)` positions a point near 3-o'clock
+     *before* rotation, not 12-o'clock, so every label was rotated
+     into roughly the wrong wedge relative to the color segment
+     underneath it. The wheel's landing animation was always correct;
+     only the visible label was wrong. Fixed the translate axes.
+2. **Found and fixed a real layout bug behind "crafting doesn't
+   work"**: the crafting panel and the "Press E to interact" prompt
+   were positioned at identical screen coordinates, directly
+   overlapping. Not a logic bug — verified crafting's underlying
+   functions were correct via simulation both before and after.
+3. **Upgrade costs redesigned**: now require every resource type
+   currently unlocked at the player's Town Hall level (not a gradual
+   "one more every 5 levels" rotation, which could mean a level-40
+   building still ignored resources unlocked ages ago).
+4. **House capacity increased 50%** (max 10→15/house, new formula
+   3/6/9/12/15 across 5 levels) to keep pace with the resource-
+   building count going from 4→6 after Quarry/Mine were added.
+5. **Map layout tightened and reorganized**: resource cluster packed
+   into a denser 3×2 grid, Workbench moved next to Town Hall, houses
+   moved from a separate far corner to cluster right next to Town
+   Hall too. Collision-verified, zero overlaps.
+6. **Unlocking is now a deliberate button-click, not auto-on-E** —
+   matching the same pattern already used for upgrades. A persistent
+   panel now shows unlock requirements (Town Hall level + cost, with
+   insufficient resources shown in red) whenever standing near any
+   locked building/house, with a dedicated Unlock button. E-press on
+   a locked building now shows info only.
 
 ## Next Recommended Task
-No blockers, so this is a genuine prioritization choice. Candidates,
-roughly in order of "smallest/safest" to "biggest new territory":
-
-1. **Playtest current build for balance** — rate/cap tier formulas,
-   egg upkeep drain rate, and Lucky Wheel reward scaling are all
-   first-guess numbers per their specs, explicitly flagged as needing
-   real playtesting, not more paper design.
-2. **Decide egg-upkeep consequences** — currently a no-op at 0 egg.
-   Needs a real design decision (production penalty? something else?)
-   before it's a complete mechanic.
-3. **Real art integration** — still 100% placeholder. Kenney.nl CC0
-   pack recommended (public-repo-safe, unlike the cuter itch.io packs
-   considered earlier). This is purely additive to existing code
-   (tileConfig.js already has a `TILE_RENDER_MODE` flag built for
-   exactly this swap).
-4. **Give refined goods a purpose** — Chicken Feed/Plank/Brick/Ingot
-   currently just sit in inventory. Needs a real design decision
-   before more get added.
-5. **Hero/dungeon system (non-NFT version)** — discussed but not
-   proposed yet. Should be built as a free, in-game-only system first
-   (same pattern as Lucky Wheel) to validate the loop before any
-   NFT/monetization conversation, which stays gated behind legal
-   review regardless of how fun the base mechanic turns out to be.
+Same candidates as last session, still valid (none of this session's
+work was new-feature work, it was fixes + rebalance):
+1. Upload this session's fixes to the repo (blocking — see Active Tasks)
+2. Playtest for balance, especially: Lucky Wheel visuals, the new
+   "all TH-unlocked resources" upgrade cost (may be steeper than
+   intended now — worth checking it doesn't make early upgrades feel
+   punishing), house capacity pacing
+3. Decide egg-upkeep consequences (still a no-op at 0 egg)
+4. Real art integration (still 100% placeholder)
+5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+   just sit in inventory)
+6. Hero/dungeon system (non-NFT version) — still just discussed, not
+   proposed
 
 ## Decisions
-- **NFT/land ownership/revenue-share/monetization stays deferred
-  pending legal review**, full stop, across every change so far.
-  Pixiland's actual land-ownership model (landholders earn passive
-  revenue from other players' activity) resembles patterns that draw
-  securities-law scrutiny — flagged early, held as a hard boundary
-  through every subsequent feature. Genre mechanics inspired by
-  Pixiland are fair game to build; their specific assets/text/
-  branding are not to be copied.
-- **Kenney.nl (CC0)** is the recommended path for real art — free,
-  redistribution-safe for a public repo (unlike itch.io packs like
-  Sprout Lands or Cute Fantasy RPG, which restrict commercial use).
-- **Resource role split** (deliberate, not incidental): Egg = worker
-  upkeep sink. Feathers = reserved for a future hero-crafting system
-  (no functional role yet). Rice/Wood/Stone/Ore = the "industrial"
-  raw→refined material lane.
-- **Workflow**: developer uploads code via GitHub's web UI (drag-and-
-  drop from delivered zips), not git CLI. OpenSpec proposals are
-  drafted and printed in-chat as pasteable markdown for the developer
-  to add manually — double-check each proposal actually made it into
-  the repo rather than assuming, since this has been missed before.
-- **Verification standard**: every delivered change gets (a) a
-  per-file syntax check, (b) a full import-graph trace (catches
-  silent breakage that per-file checks miss), and (c) functional
-  simulation tests of the actual new behavior before being called
-  done. This standard exists because of real bugs caught by exactly
-  this process, not as a hypothetical precaution.
+(Carried over from prior session, still all in force — no changes
+this session.)
+- NFT/land ownership/revenue-share/monetization stays deferred
+  pending legal review, full stop.
+- Kenney.nl (CC0) is the recommended path for real art, not yet
+  integrated.
+- Resource role split: Egg = worker upkeep. Feathers = reserved for
+  future hero system. Rice/Wood/Stone/Ore = industrial raw→refined
+  lane.
+- Workflow: developer uploads via GitHub web UI, not git CLI.
+- Verification standard: every change gets a per-file syntax check,
+  a full import-graph trace, and functional simulation tests before
+  being called done — this session is a direct example of why: two
+  real bugs (wheel label math, panel overlap) were found by reasoning
+  through the actual code/CSS, not by assuming a prior fix worked.
+
+## New Decision This Session
+- **When a bug report says a previous fix "still" isn't working,
+  re-derive the fix from scratch rather than re-applying the same
+  patch.** Both wheel bugs this session were previously "fixed" in
+  an earlier session but the fixes were incomplete/wrong in ways that
+  weren't caught without a real browser to test in. Default to
+  suspecting the earlier fix's own correctness, not just staleness of
+  the build the developer is testing.
 
 ## Session Log
-- **This session**: Diagnosed and corrected a false alarm — an
-  earlier check found the repo missing all code, but the developer
-  had just uploaded it; re-verified via full diff against the latest
-  build (identical, confirmed in sync). Did a full OpenSpec archive
-  pass: wrote/updated 8 spec files reflecting actual current
-  implementation (resource-production, building-progression,
-  worker-system, town-hall-progression, quest-board, lucky-wheel,
-  crafting-system, plus updates to the pre-existing world-map and
-  interaction-system specs which had gone stale), removed all 5
-  fully-implemented change folders. No production code changes this
-  session — planning/documentation/audit only, per the Planner role.
+- **This session**: Fixed 9 items from direct playtesting feedback:
+  2 real Lucky Wheel bugs (dividers, reward-label mismatch — both
+  root-caused via careful geometry/CSS reasoning, not guessed at),
+  1 real layout bug (crafting panel overlapping the interact prompt),
+  redesigned upgrade costs to include all TH-unlocked resources,
+  increased house capacity 50%, reorganized the map layout (tighter
+  resource cluster, Workbench + houses moved next to Town Hall), and
+  made unlocking a deliberate button-click matching the upgrade
+  pattern (with a new persistent requirements panel). All changes
+  verified via syntax check + full import-graph trace + functional
+  simulation. Not yet uploaded to the repo — delivered as a zip only.

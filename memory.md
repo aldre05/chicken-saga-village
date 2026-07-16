@@ -17,8 +17,12 @@ hasn't been uploaded yet. **Upload the latest zip before starting any
 new session.**
 
 ## Active Tasks
-1. **Upload this session's fixes to the repo** (see Session Log) —
-   nothing pushed yet, only delivered as a zip.
+1. ~~Upload this session's fixes to the repo~~ — **stale, corrected
+   2026-07-16**: verified directly against the cloned repo (not
+   assumed) that all of the Lucky Wheel/crafting-panel/house-capacity/
+   map-layout/unlock-button fixes described below ARE present in the
+   repo (commits `cb9208a`/`43897f0` and earlier). This note in
+   memory.md was out of date with reality.
 2. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
    root-caused and fixed via code reasoning, not visual testing —
    worth confirming they look right in an actual browser).
@@ -173,6 +177,48 @@ that no building's upgrade panel changes cost when leveling an
 unrelated building/unlocking a new resource elsewhere, and decide on
 the flagged level-6-vs-level-11 discrepancy above.
 
+## Frontend Verification: Upgrade-Cost Panel vs. New Deterministic Cost Shape (2026-07-16)
+**Scope (given, not a code-change ticket):** confirm the building
+panel's cost-preview display (`formatCostHTML`, upgrade preview text
+in `main.js`) still works correctly now that Backend's Ticket 1 fix
+landed (`getUpgradeCost()` no longer takes/needs `townHallLevel`).
+
+**Findings — no code changes required:**
+- All 5 call sites in `main.js` (upgrade action handler at line 182,
+  plus 4 in the panel-refresh logic — house branch lines 608/610,
+  resource-building branch lines 635/637) already had the
+  `townHallLevel` argument removed. This was done in the same commit
+  batch as Backend's fix (`5441c99`/`1556f2c`), not left dangling —
+  nothing to clean up.
+- `formatCostHTML` is shape-agnostic by design: it only needs
+  `getUpgradeCost()` to return a plain `{resourceId: amount}` object,
+  which it still does. No dependency on *how* that object was
+  computed (old TH-reactive scan vs. new deterministic rotation).
+- Confirmed every resource id `getUpgradeCost()` can ever emit (base
+  costs + rotation-tier extras) exists in `RESOURCE_CONFIG`, since
+  `RESOURCE_IDS` is derived directly from that same config object —
+  so the icon lookup in `formatCostHTML` can never hit `undefined`.
+
+**Verification performed:** `node --check` on `main.js` and
+`buildingLevels.js` (syntax OK). Functional simulation (temp Node
+script, deleted after use) walked every real building id
+(`old_coop`, `nest_bundle`, `woodshed`, `rice_paddy`, `quarry`,
+`mine`, `house_1`–`5`) across levels 1–12, checking the red
+`cost-insufficient` highlighting logic against both a zero-resources
+case (everything should flag insufficient) and an abundant-resources
+case (nothing should) — including levels that cross the 5-level
+rotation-tier boundary where a cost dict gains an extra resource
+type. All passed. Also re-verified `canUpgradeBuilding()` agrees with
+the same afford/can't-afford outcomes at both extremes.
+
+**Also corrected:** the "Active Tasks" #1 item above, which claimed
+last session's fixes were still un-uploaded — that was stale; direct
+repo inspection this session confirmed they're all present.
+
+**Next frontend task:** None queued from this ticket. Real in-browser
+playtest of the upgrade panel (visual confirmation of red highlighting
+and layout, not just logic) is still open per Active Task #2 above.
+
 ## Session Log
 - **This session**: Fixed 9 items from direct playtesting feedback:
   2 real Lucky Wheel bugs (dividers, reward-label mismatch — both
@@ -185,3 +231,13 @@ the flagged level-6-vs-level-11 discrepancy above.
   pattern (with a new persistent requirements panel). All changes
   verified via syntax check + full import-graph trace + functional
   simulation. Not yet uploaded to the repo — delivered as a zip only.
+- **2026-07-16 (Frontend)**: Cloned repo fresh and verified directly
+  (rather than trusting memory.md's own claims) that last session's
+  fixes are actually live in the repo — corrected the stale "not
+  uploaded" note above. Verified the upgrade-cost preview UI
+  (`formatCostHTML` + red insufficient-resource highlighting) needs
+  no changes after Backend's Ticket 1 fix (`getUpgradeCost()` dropping
+  `townHallLevel`) — all 5 call sites in `main.js` were already
+  updated, and functional simulation across every building/level
+  confirmed the highlighting logic still works against the new cost
+  shape. No code changes made. Files touched: `memory.md` only.

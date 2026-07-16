@@ -110,6 +110,69 @@ this session.)
   suspecting the earlier fix's own correctness, not just staleness of
   the build the developer is testing.
 
+## Backend Engineer Check-In (2026-07-16)
+Reviewed repo/memory to look for backend work. Confirmed: project is
+still 100% client-side (vanilla JS + Canvas, localStorage only) — no
+server, API, database, or auth exists or is in scope right now. No
+code changes made this check-in. Asked the developer whether to start
+cloud save/sync, accounts/auth, or a Hero/Dungeon backend; developer
+said none of these yet.
+
+## Bug Fix: Upgrade Cost Was Reactive to Live TH Unlock State (2026-07-16)
+**Root cause (given, not re-diagnosed):** `getUpgradeCost()` in
+`buildingLevels.js` called `isResourceUnlocked(resId, townHallLevel)`
+against *live* game state on every call, so a building already at a
+fixed level could suddenly demand a brand-new resource type the
+instant something unrelated elsewhere in the village crossed that
+resource's Town Hall threshold — with zero further leveling on that
+building itself. Upgrade cost must be a pure function of the
+building's own level only.
+
+**Fix implemented (files modified: `js/buildingLevels.js`,
+`js/main.js`):**
+- Replaced the TH-reactive resource-unlock scan in `getUpgradeCost()`
+  with a fixed, deterministic rotation keyed only to the building's
+  own level: every `EXTRA_RESOURCE_LEVEL_INTERVAL` (5) levels, one
+  more resource type is added, picked in order from
+  `RESOURCE_IDS.filter(id => !(id in base))` (deterministic per
+  building since `RESOURCE_IDS` order is fixed).
+- Dropped the now-unused `townHallLevel` parameter from
+  `getUpgradeCost`, `canUpgradeBuilding`, `upgradeBuilding`.
+- Removed the unused `isResourceUnlocked` import from
+  `buildingLevels.js` (still used/exported fine from `resources.js`
+  itself, so no orphaned export).
+- Updated all 5 call sites in `main.js` (upgrade action handler +
+  4 in the upgrade-panel refresh logic, both house and resource-
+  building branches) to drop the trailing `gameState.townHall.level`
+  argument.
+
+**Verification:** `node --check` on both modified files (syntax OK).
+Full grep of `js/*.js` for all three function names confirmed no
+remaining call site still passes a 4th/3rd `townHallLevel` arg, and
+no other file imports `isResourceUnlocked` from `buildingLevels.js`.
+Functional simulation (temp Node script, deleted after use) walked
+Old Coop level 1→11 and confirmed cost is 100% deterministic by level
+alone (same output called twice at the same level) and resource-type
+count only grows at the fixed 5-level cadence, never from unrelated
+state.
+
+**Flagged discrepancy (not fixed, needs product decision):** The
+task's acceptance criteria said "Old Coop to level 6 should require a
+3rd resource type." With the exact formula specified, Old Coop's
+own base cost already has 1 resource (`egg`), so level 6 adds a
+*2nd* type (`feathers`); a 3rd type doesn't land until level 11.
+`nest_bundle` (2 base resources) would hit a 3rd type at level 6
+instead. Implemented the code exactly as specified rather than
+silently changing the interval/base to force "3rd type at level 6"
+for Old Coop specifically — needs a developer call on whether the
+interval, the affected building, or the acceptance wording should
+change.
+
+**Next backend task:** None queued. Recommend developer playtest
+that no building's upgrade panel changes cost when leveling an
+unrelated building/unlocking a new resource elsewhere, and decide on
+the flagged level-6-vs-level-11 discrepancy above.
+
 ## Session Log
 - **This session**: Fixed 9 items from direct playtesting feedback:
   2 real Lucky Wheel bugs (dividers, reward-label mismatch — both

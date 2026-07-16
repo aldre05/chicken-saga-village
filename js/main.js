@@ -70,9 +70,21 @@ function resizeCanvas() {
   canvas.height = Math.min(window.innerHeight - 220, 640);
 }
 resizeCanvas();
-window.addEventListener('resize', resizeCanvas);
 
 const camera = createCamera(worldWidth, worldHeight, canvas.width, canvas.height);
+
+// Keep the camera's clamp bounds in sync with the canvas whenever it's
+// resized. Previously the resize listener only resized the <canvas>
+// element itself — the camera's viewportWidth/viewportHeight (used to
+// clamp panning to the map edges) were captured once at load and never
+// updated, so resizing the browser window left the camera clamping
+// against stale dimensions, which could show past the map edge or
+// stop it from correctly following the player near boundaries.
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  camera.viewportWidth = canvas.width;
+  camera.viewportHeight = canvas.height;
+});
 
 // Start the player near the crossroads, clear of both building clusters.
 const player = createPlayer(14 * RENDERED_TILE_SIZE, 9 * RENDERED_TILE_SIZE);

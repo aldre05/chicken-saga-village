@@ -3,7 +3,7 @@
 // level increases worker capacity, production rate, AND storage cap —
 // each using its own growth curve (see below), not a single shared one.
 
-import { canAfford, spendResources, RESOURCE_IDS, isResourceUnlocked } from './resources.js';
+import { canAfford, spendResources, RESOURCE_IDS } from './resources.js';
 
 // Worker slots: linear, capped at 50. Steeper than before (was +1/level)
 // so resource buildings can keep pace with how fast house population
@@ -109,17 +109,18 @@ export function isHouseMaxed(buildingId, buildingLevels) {
   return (buildingLevels[buildingId] || 1) >= MAX_HOUSE_LEVEL;
 }
 
-// Upgrade costs now include EVERY resource type currently unlocked at
-// the player's Town Hall level, not just the building's original 1-2
-// (previously added one extra resource type every 5 levels — replaced
-// because it meant a level-40 building might still ignore resources
-// the player has had unlocked for ages). Base-cost resources scale at
-// the full growth rate; other TH-unlocked resources scale the same
-// way but from a smaller base amount, so the "main" resources still
+// Upgrade costs are a pure function of the building's OWN level — never
+// reactive to unrelated game state (e.g. Town Hall unlocks elsewhere in
+// the village). Every EXTRA_RESOURCE_LEVEL_INTERVAL levels, one more
+// resource type is added to the cost, picked in a fixed rotation over
+// every resource NOT already in the building's base cost. Base-cost
+// resources scale at the full growth rate; rotation resources scale the
+// same way but from a smaller base amount, so the "main" resources still
 // dominate the cost.
+const EXTRA_RESOURCE_LEVEL_INTERVAL = 5;
 const EXTRA_RESOURCE_BASE_AMOUNT = 10;
 
-export function getUpgradeCost(buildingId, buildingLevels, townHallLevel) {
+export function getUpgradeCost(buildingId, buildingLevels) {
   const level = buildingLevels[buildingId] || 1;
   const base = BASE_UPGRADE_COST[buildingId];
   const growth = Math.pow(UPGRADE_COST_GROWTH, level - 1);
@@ -129,25 +130,26 @@ export function getUpgradeCost(buildingId, buildingLevels, townHallLevel) {
     cost[resId] = Math.ceil(amount * growth);
   }
 
-  for (const resId of RESOURCE_IDS) {
-    if (resId in cost) continue; // already covered by base cost
-    if (isResourceUnlocked(resId, townHallLevel)) {
-      cost[resId] = Math.ceil(EXTRA_RESOURCE_BASE_AMOUNT * growth);
+  const extraTierCount = Math.floor((level - 1) / EXTRA_RESOURCE_LEVEL_INTERVAL);
+  if (extraTierCount > 0) {
+    const rotation = RESOURCE_IDS.filter(id => !(id in base));
+    for (let i = 0; i < extraTierCount && i < rotation.length; i++) {
+      cost[rotation[i]] = Math.ceil(EXTRA_RESOURCE_BASE_AMOUNT * growth);
     }
   }
 
   return cost;
 }
 
-export function canUpgradeBuilding(buildingId, buildingLevels, resourceState, townHallLevel) {
+export function canUpgradeBuilding(buildingId, buildingLevels, resourceState) {
   if (isHouse(buildingId) && isHouseMaxed(buildingId, buildingLevels)) return false;
-  return canAfford(resourceState, getUpgradeCost(buildingId, buildingLevels, townHallLevel));
+  return canAfford(resourceState, getUpgradeCost(buildingId, buildingLevels));
 }
 
 // Returns true if the upgrade happened.
-export function upgradeBuilding(buildingId, buildingLevels, resourceState, townHallLevel) {
-  if (!canUpgradeBuilding(buildingId, buildingLevels, resourceState, townHallLevel)) return false;
-  spendResources(resourceState, getUpgradeCost(buildingId, buildingLevels, townHallLevel));
+export function upgradeBuilding(buildingId, buildingLevels, resourceState) {
+  if (!canUpgradeBuilding(buildingId, buildingLevels, resourceState)) return false;
+  spendResources(resourceState, getUpgradeCost(buildingId, buildingLevels));
   buildingLevels[buildingId] = (buildingLevels[buildingId] || 1) + 1;
   return true;
 }

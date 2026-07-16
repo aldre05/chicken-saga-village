@@ -46,15 +46,21 @@ function migrateOldResourceShape(rawResources) {
     };
     // grain → rice rename: old saves have carried.grain, new shape
     // has no "grain" key at all (renamed to "rice"). Carry the value
-    // over explicitly so renamed-resource progress isn't lost.
+    // over explicitly so renamed-resource progress isn't lost, then
+    // delete the old key — the earlier spread above copies it in
+    // verbatim, so without this it lingers in the save forever as
+    // dead data alongside the new "rice" key.
     if (rawResources.carried && typeof rawResources.carried.grain === 'number') {
       merged.carried.rice = rawResources.carried.grain;
+      delete merged.carried.grain;
     }
     if (rawResources.totalCollected && typeof rawResources.totalCollected.grain === 'number') {
       merged.totalCollected.rice = rawResources.totalCollected.grain;
+      delete merged.totalCollected.grain;
     }
     if (rawResources.buildingLastCollectedAt && rawResources.buildingLastCollectedAt.grain) {
       merged.buildingLastCollectedAt.rice = rawResources.buildingLastCollectedAt.grain;
+      delete merged.buildingLastCollectedAt.grain;
     }
     return merged;
   }

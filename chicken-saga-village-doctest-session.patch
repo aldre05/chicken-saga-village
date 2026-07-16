@@ -1,0 +1,2236 @@
+From 93f6d8affdb56c2debda709fc4b1225ffe5ff5e7 Mon Sep 17 00:00:00 2001
+From: aldre05 <132693573+aldre05@users.noreply.github.com>
+Date: Thu, 16 Jul 2026 18:19:52 +0000
+Subject: [PATCH] Add automated test suite (124 tests), README, and
+ architecture docs
+
+- Add test/ using Node's built-in node:test runner (zero deps),
+  covering all 14 pure-logic js/ modules: resources, buildingLevels,
+  buildingUnlocks, townHall, workers, upkeep, crafting, questBoard,
+  camera, interactions, interactionHandlers, luckyWheel, gameState,
+  and map layout integrity. Several tests are explicit regression
+  guards for bugs documented in memory.md (production backfill on
+  worker assignment, upgrade-cost purity, camera resize clamping,
+  edge-vs-center interaction distance).
+- Add test/helpers/localStorage-mock.js, an in-memory localStorage
+  polyfill so gameState.js save/load/migration logic is testable
+  under plain Node.
+- Fix a real bug found via testing: migrateOldResourceShape() in
+  gameState.js never deleted the legacy 'grain' key after copying
+  its value to 'rice', so every migrated save carried a dead 'grain'
+  entry forward indefinitely. Low severity (main.js never iterates
+  raw Object.keys() of resources.carried) but real save-data bloat.
+- Rewrite README.md from a one-line placeholder into a full project
+  overview: controls, local-serving instructions (ES modules need
+  http://, not file://), project structure, save/migration notes,
+  testing instructions, contribution notes.
+- Add docs/ARCHITECTURE.md: pure-logic-vs-DOM-glue module split, full
+  game state shape reference, per-frame game loop order, the
+  'offline-safe timestamp checkpoint' pattern used across
+  resources/upkeep/Lucky Wheel, the full save-migration chain, and a
+  task-to-file lookup table.
+- Add package.json (type: module, npm test script) so the suite is
+  discoverable without prior knowledge of the runner.
+- Update memory.md with this session's findings and next steps.
+
+124/124 tests passing. All js/*.js pass node --check.
+---
+ README.md                         | 150 +++++++++++++++++-
+ docs/ARCHITECTURE.md              | 173 +++++++++++++++++++++
+ js/gameState.js                   |   8 +-
+ memory.md                         | 248 ++++++++++++++++++++----------
+ package.json                      |  14 ++
+ test/buildingLevels.test.js       | 188 ++++++++++++++++++++++
+ test/buildingUnlocks.test.js      |  84 ++++++++++
+ test/camera.test.js               |  51 ++++++
+ test/crafting.test.js             |  70 +++++++++
+ test/gameState.test.js            | 149 ++++++++++++++++++
+ test/helpers/localStorage-mock.js |  45 ++++++
+ test/interactionHandlers.test.js  |  67 ++++++++
+ test/interactions.test.js         |  63 ++++++++
+ test/luckyWheel.test.js           | 134 ++++++++++++++++
+ test/map.test.js                  |  57 +++++++
+ test/questBoard.test.js           |  62 ++++++++
+ test/resources.test.js            | 142 +++++++++++++++++
+ test/townHall.test.js             |  77 ++++++++++
+ test/upkeep.test.js               |  73 +++++++++
+ test/workers.test.js              | 134 ++++++++++++++++
+ 20 files changed, 1903 insertions(+), 86 deletions(-)
+ create mode 100644 docs/ARCHITECTURE.md
+ create mode 100644 package.json
+ create mode 100644 test/buildingLevels.test.js
+ create mode 100644 test/buildingUnlocks.test.js
+ create mode 100644 test/camera.test.js
+ create mode 100644 test/crafting.test.js
+ create mode 100644 test/gameState.test.js
+ create mode 100644 test/helpers/localStorage-mock.js
+ create mode 100644 test/interactionHandlers.test.js
+ create mode 100644 test/interactions.test.js
+ create mode 100644 test/luckyWheel.test.js
+ create mode 100644 test/map.test.js
+ create mode 100644 test/questBoard.test.js
+ create mode 100644 test/resources.test.js
+ create mode 100644 test/townHall.test.js
+ create mode 100644 test/upkeep.test.js
+ create mode 100644 test/workers.test.js
+
+diff --git a/README.md b/README.md
+index c852e2b..fc5fe35 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1,149 @@
+-# chicken-saga-village
+\ No newline at end of file
++# Chicken Saga Village
++
++A free, fan-made village builder for the Chicken Saga community —
++inspired by the Pixiland genre (not an IP copy of any specific game).
++Vanilla JavaScript + HTML5 Canvas, no build step, no framework, no
++backend. Progress is saved locally in your browser.
++
++🐔 **Unofficial fan project.** Not affiliated with or endorsed by any
++other game. This is a passion project with no real-world
++monetization: no NFTs, no tokens, no purchases. All art is
++placeholder (solid-color rectangles) pending a real tileset.
++
++## Playing it
++
++Grow a village of chickens: unlock and upgrade buildings, assign
++workers to produce resources, craft items at the Workbench, complete
++quests from Farmer Joe, and spin the free Lucky Wheel.
++
++**Controls**
++- `WASD` / Arrow keys — move
++- `E` — interact with the nearest building or NPC
++- `+` / `-` buttons (or `F` / `G`) — assign or unassign a worker at
++  the currently open building panel
++
++## Running it locally
++
++This is a static site — no build step, no bundler, no `npm install`
++required to play it. Because it uses ES module `<script type="module">`
++imports, it needs to be served over `http://` rather than opened
++directly as a `file://` URL (browsers block module imports from the
++filesystem).
++
++Pick any static file server. For example, with Node installed:
++
++```bash
++npx http-server -c-1 .
++```
++
++or with Python:
++
++```bash
++python3 -m http.server 8080
++```
++
++Then open the printed local URL (e.g. `http://localhost:8080`) in
++your browser.
++
++## Project structure
++
++```
++index.html          Page shell — canvas, HUD, panels, modals
++styles.css           All styling
++js/
++  main.js            Entry point: game loop, input handling, DOM wiring,
++                      autosave, Lucky Wheel UI
++  gameState.js        Combines every subsystem's state; localStorage
++                      save/load, including migration of old save formats
++  map.js              Tile grid layout + interactable building/NPC placement
++  tileConfig.js       Tile size/scale/color constants
++  player.js           Player entity, movement, collision
++  camera.js           Viewport follow-and-clamp logic
++  interactions.js     Nearest-interactable lookup, dialogue box state
++  interactionHandlers.js   Per-building/NPC "press E" behavior
++  resources.js         Resource config (egg, feathers, wood, rice,
++                      stone, ore), production accrual, afford/spend
++  buildingLevels.js    Per-building leveling: worker slots, rate/cap
++                      growth curves, upgrade costs
++  buildingUnlocks.js   One-time unlock costs, gated by Town Hall level
++  townHall.js         Town Hall level + upgrade costs (gates which
++                      resources/buildings are available)
++  workers.js           Worker population and per-building assignment
++  upkeep.js             Egg upkeep consumed by assigned workers over time
++  crafting.js           Workbench recipes and inventory
++  questBoard.js         Farmer Joe's quest list and rewards
++  luckyWheel.js         Free spin mechanic: ticket accrual, weighted
++                      rewards, Town-Hall-scaled payouts
++  render.js / sprites.js / spriteRenderer.js   Canvas drawing
++openspec/
++  specs/               Current-state feature specs, one per system
++  changes/             Proposals for past/planned changes (design docs,
++                      task breakdowns) — see openspec's own conventions
++test/                  Automated test suite (see below)
++memory.md              Running project log/handoff notes between work
++                      sessions — read this first for current status
++```
++
++Most of the `js/` modules (everything except `main.js`, `render.js`,
++`sprites.js`, and `spriteRenderer.js`) are plain, framework-free logic
++with no DOM or Canvas dependency — they take in a state object and
++return a new value or mutate it in place. `main.js` is the only file
++that touches the DOM directly; it wires the pure logic modules up to
++button clicks, keyboard input, and the HUD.
++
++### Save data & migrations
++
++All progress lives in a single `localStorage` key
++(`chickenVillageSave`). `gameState.js` has migrated the save format
++several times as the game evolved (flat egg counter → multi-resource
++dict, `grain` → `rice` rename, a single `houses` count → five
++individual house buildings, etc.) — see the comments in
++`loadGameState()` / `migrateOldResourceShape()` for the full history.
++Returning players should never lose progress across an update; any
++change to the save shape needs a corresponding migration step and
++test coverage (see `test/gameState.test.js`).
++
++## Testing
++
++The test suite uses Node's built-in test runner — no dependencies to
++install.
++
++```bash
++npm test
++# or directly:
++node --test
++```
++
++It covers every pure-logic module in `js/` (resource production math,
++building/Town Hall leveling and costs, worker assignment, upkeep,
++crafting, quests, the Lucky Wheel, camera clamping, interaction
++distance checks, map layout integrity, and save/load including every
++legacy-format migration) with an in-memory `localStorage` polyfill
++(`test/helpers/localStorage-mock.js`) so save/load logic can run
++without a browser.
++
++`main.js`, `render.js`, `sprites.js`, and `spriteRenderer.js` are not
++unit-tested — they're DOM/Canvas glue and visual output, best verified
++by playtesting in an actual browser rather than headlessly. When
++changing anything in those files (or anything with a visual/UX
++component), playtest manually after making the change.
++
++Before committing any change to `js/`, at minimum:
++
++```bash
++node --check js/<file-you-changed>.js   # syntax
++node --test                              # full suite
++```
++
++## Contributing / development notes
++
++- This project follows an [openspec](openspec/)-style workflow:
++  planned changes get a `proposal.md` + `tasks.md` + `design.md` under
++  `openspec/changes/<change-name>/`, and the current state of each
++  system is documented under `openspec/specs/`.
++- `memory.md` is the running handoff log between work sessions/agents
++  — check it first for current status, open tasks, and past decisions
++  before starting new work.
++- No NFT/land ownership/monetization work is in scope; it's
++  deliberately deferred pending legal review (see `memory.md` →
++  Decisions).
+diff --git a/docs/ARCHITECTURE.md b/docs/ARCHITECTURE.md
+new file mode 100644
+index 0000000..947cc3b
+--- /dev/null
++++ b/docs/ARCHITECTURE.md
+@@ -0,0 +1,173 @@
++# Architecture
++
++This doc is for anyone (human or agent) picking up development on
++Chicken Saga Village for the first time. It covers how the pieces fit
++together; for *what's currently built and what's next*, see
++`memory.md` and `openspec/specs/`.
++
++## High-level shape
++
++No framework, no build step, no bundler. `index.html` loads
++`js/main.js` as an ES module; every other `js/` file is imported from
++there (directly or transitively) via native `import`/`export`. There
++is no server — everything runs client-side, and persistence is a
++single `localStorage` key.
++
++The codebase splits cleanly into two kinds of files:
++
++1. **Pure logic modules** (`resources.js`, `buildingLevels.js`,
++   `buildingUnlocks.js`, `townHall.js`, `workers.js`, `upkeep.js`,
++   `crafting.js`, `questBoard.js`, `luckyWheel.js`, `interactions.js`,
++   `interactionHandlers.js`, `camera.js`, `gameState.js`, `map.js`,
++   `tileConfig.js`). These have no DOM/Canvas dependency (aside from
++   `gameState.js`'s two `localStorage` calls) — they take state
++   objects in and return values or mutate the state in place. This is
++   what `test/` covers, and it's why the test suite can run under
++   plain Node with no browser or jsdom.
++2. **Presentation glue** (`main.js`, `render.js`, `player.js`,
++   `sprites.js`, `spriteRenderer.js`). `main.js` is the only file that
++   touches `document`/DOM elements; `render.js` + `spriteRenderer.js`
++   draw to the `<canvas>`. These aren't unit-tested — verify changes
++   here by playtesting in a browser.
++
++Keeping that split intact is the main architectural rule worth
++protecting: if new gameplay logic needs a test, it belongs in a pure
++module, not inline in `main.js`.
++
++## Game state shape
++
++`gameState.js`'s `createGameState()` is the single source of truth for
++what a "game state" object looks like:
++
++```
++{
++  resources:        { carried, totalCollected, buildingLastCollectedAt }  // resources.js
++  townHall:          { level }                                            // townHall.js
++  inventory:         { [recipeId]: count }                                // crafting.js
++  workers:           { assignments: { [resourceId]: count } }             // workers.js
++  buildingUnlocks:   { [buildingId]: true }                                // buildingUnlocks.js
++  buildingLevels:    { [buildingId]: level }                               // buildingLevels.js
++  questBoard:        { claimedQuestIds: [] }                              // questBoard.js
++  luckyWheel:        { tickets, lastGeneratedAt, totalSpins }             // luckyWheel.js
++  upkeep:            { lastCheckedAt }                                    // upkeep.js
++  popularity:        number
++}
++```
++
++Every subsystem owns its own slice and its own `createXState()`
++factory; `gameState.js` just assembles them and handles
++localStorage persistence + migration. If you add a new subsystem,
++follow that pattern: a `createXState()` export, plumbed into
++`createGameState()`, plus a merge line in `loadGameState()`.
++
++## The game loop (`main.js`)
++
++`requestAnimationFrame`-driven, no fixed timestep — `dt` is
++wall-clock delta capped at 0.05s (so a stuttering tab doesn't cause a
++huge simulated jump). Each frame, in order:
++
++1. `updatePlayer()` — reads currently-held keys, moves the player,
++   resolves collision (skipped while a dialogue box is open).
++2. `applyUpkeep()` — egg upkeep for assigned workers.
++3. `camera.follow()` — recenter on the player, clamped to map bounds.
++4. `findNearestInteractable()` — for the "press E" prompt.
++5. HUD/UI refresh functions (prompt, dialogue, resource HUD, Lucky
++   Wheel widget).
++6. `renderFrame()` — draws the frame to canvas.
++
++Player movement is resolved per-axis (move X, revert if blocked; then
++move Y, revert if blocked) rather than as one diagonal step — this is
++what lets the player slide along a wall instead of fully stopping on
++a corner clip. See `player.js`'s `updatePlayer()`.
++
++## The "offline-safe timestamp checkpoint" pattern
++
++This pattern shows up in four places and is worth understanding once
++rather than re-deriving per-module: **resource production**
++(`resources.js`), **egg upkeep** (`upkeep.js`), and **Lucky Wheel
++ticket generation** (`luckyWheel.js`) all avoid a `setInterval`
++tick-accumulator in favor of storing a `lastX` timestamp and computing
++elapsed real time against `Date.now()` on demand. This means:
++
++- Production/upkeep/tickets keep accruing correctly even if the tab
++  was closed, backgrounded, or the frame rate stuttered — there's no
++  "missed ticks" problem, because nothing is counted in ticks.
++- Whenever something is collected/spent/consumed, the checkpoint
++  timestamp advances by *exactly* the amount of time that was
++  "spent" producing the collected amount — not reset to `now`
++  outright — so fractional leftover progress (half an egg, a
++  partial Lucky Wheel ticket) isn't discarded. See
++  `flushAndResetCheckpoint()` in `resources.js` and the fractional-
++  remainder handling in `upkeep.js`'s `applyUpkeep()` for the
++  clearest examples.
++- Worker assignment changes call `flushAndResetCheckpoint()` *before*
++  changing the assigned count, specifically to avoid "backfilling"
++  production at the new rate for time that elapsed under the old
++  (possibly zero) worker count. This was a real bug in an earlier
++  version — see `test/resources.test.js` and `test/workers.test.js`
++  for the regression tests guarding it.
++
++If you add a new time-based accrual system, follow this pattern
++rather than `setInterval` + tick counting.
++
++## Save data & migration chain
++
++`gameState.js`'s `loadGameState()` reads one `localStorage` key
++(`chickenVillageSave`), and has to handle *every* save shape the game
++has ever produced, oldest first:
++
++1. Flat `carriedEggs`/`totalEggsCollected` numbers (pre multi-resource
++   economy) → converted into the `carried.egg`/`totalCollected.egg`
++   dict shape.
++2. `grain` resource key → renamed to `rice` (in both `carried` and
++   `totalCollected`, plus `buildingLastCollectedAt`) — the old key is
++   explicitly deleted after copying, not just left dangling.
++3. No `buildingUnlocks` at all (pre-unlock-system saves) → inferred
++   from production evidence (e.g. `totalCollected.wood > 0` implies
++   the Woodshed must have been unlocked).
++4. `grain_store` building id → renamed to `rice_paddy` (unlock state
++   and level both carried over).
++5. Flat `workers.houses` count → expanded into individual
++   `house_1..house_5` unlock flags.
++6. Worker assignments above the current level-based per-building cap
++   (from when the cap was a flat, higher number) → clamped down via
++   `clampAssignmentsToCaps()`.
++
++**If you change any state shape, add a migration step here and a test
++in `test/gameState.test.js`** — the whole point of this chain is that
++a returning player never loses progress across an update. Corrupted
++or unparseable save JSON falls back to a fresh game state rather than
++throwing (wrapped in try/catch).
++
++## Where to look for what
++
++| I want to... | Look at |
++|---|---|
++| Change how much a resource produces, or add a new resource | `resources.js` (`RESOURCE_CONFIG`) |
++| Change building leveling costs/curves | `buildingLevels.js` |
++| Add/change a building's one-time unlock cost | `buildingUnlocks.js` (`UNLOCK_CONFIG`) |
++| Change what pressing E on a building/NPC says or does | `interactionHandlers.js` |
++| Add a new interactable to the map | `map.js` (`interactables`) — remember to also add a `HANDLERS` entry |
++| Change Town Hall progression | `townHall.js` |
++| Add a crafting recipe | `crafting.js` (`RECIPES`) |
++| Add a quest | `questBoard.js` (`QUEST_LIST`) — needs a `check(gameState)` predicate and a `reward` dict |
++| Change Lucky Wheel odds/payouts | `luckyWheel.js` (`REWARD_TABLE`, `getRewardScale`) |
++| Change player movement/collision | `player.js` |
++| Change camera behavior | `camera.js` |
++| Change visuals/rendering | `render.js`, `sprites.js`, `spriteRenderer.js`, `styles.css` |
++| Wire up new UI / DOM elements | `main.js` + `index.html` (keep element ids in sync between the two) |
++
++## Testing philosophy
++
++See the root `README.md` "Testing" section for how to run the suite.
++Architecturally: every pure logic module gets a `test/<module>.test.js`
++with the same name, using Node's built-in `node:test` runner (no
++dependencies). `gameState.test.js` additionally imports
++`test/helpers/localStorage-mock.js` first (a tiny in-memory
++`localStorage` polyfill) so save/load can be tested without a real
++browser. Tests favor exercising the actual exported functions with
++realistic state shapes over mocking internals, and several tests are
++explicit regression guards for bugs that were previously found and
++fixed (documented inline with what they're guarding against) — check
++`memory.md`'s history before deleting or "simplifying" a test that
++looks redundant; it likely exists because of a specific past bug.
+diff --git a/js/gameState.js b/js/gameState.js
+index 821d60e..9acc284 100644
+--- a/js/gameState.js
++++ b/js/gameState.js
+@@ -46,15 +46,21 @@ function migrateOldResourceShape(rawResources) {
+     };
+     // grain → rice rename: old saves have carried.grain, new shape
+     // has no "grain" key at all (renamed to "rice"). Carry the value
+-    // over explicitly so renamed-resource progress isn't lost.
++    // over explicitly so renamed-resource progress isn't lost, then
++    // delete the old key — the earlier spread above copies it in
++    // verbatim, so without this it lingers in the save forever as
++    // dead data alongside the new "rice" key.
+     if (rawResources.carried && typeof rawResources.carried.grain === 'number') {
+       merged.carried.rice = rawResources.carried.grain;
++      delete merged.carried.grain;
+     }
+     if (rawResources.totalCollected && typeof rawResources.totalCollected.grain === 'number') {
+       merged.totalCollected.rice = rawResources.totalCollected.grain;
++      delete merged.totalCollected.grain;
+     }
+     if (rawResources.buildingLastCollectedAt && rawResources.buildingLastCollectedAt.grain) {
+       merged.buildingLastCollectedAt.rice = rawResources.buildingLastCollectedAt.grain;
++      delete merged.buildingLastCollectedAt.grain;
+     }
+     return merged;
+   }
+diff --git a/memory.md b/memory.md
+index 8107164..e808286 100644
+--- a/memory.md
++++ b/memory.md
+@@ -1,6 +1,6 @@
+ # Chicken Saga Village — Project Memory
+ 
+-_Last updated: 2026-07-15_
++_Last updated: 2026-07-17_
+ 
+ ## Current Objective
+ Build "Chicken Village" — a free, Pixiland-genre-inspired (not
+@@ -10,87 +10,131 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
+ localStorage only (no backend/accounts yet).
+ 
+ ## Current Status
+-Repo was confirmed in sync with the codebase last session (full diff,
+-zero differences). This session was a bug-fix + rebalance pass on top
+-of that — not yet re-verified against the repo, since the fixed code
+-hasn't been uploaded yet. **Upload the latest zip before starting any
+-new session.**
++Codebase had zero automated tests and a one-line README before this
++session (Documentation & Testing pass, 2026-07-17). Both are now in
++place: a 124-test suite covering every pure-logic module, plus a real
++README and developer architecture doc. One real (minor) bug was found
++via testing and fixed — see below. Prior sessions' claims (map layout
++zero-overlap, upgrade-cost purity, camera resize fix, etc.) are now
++backed by persistent regression tests instead of one-off notes/temp
++scripts that got deleted after use.
+ 
+ ## Active Tasks
+-1. ~~Upload this session's fixes to the repo~~ — **stale, corrected
+-   2026-07-16**: verified directly against the cloned repo (not
+-   assumed) that all of the Lucky Wheel/crafting-panel/house-capacity/
+-   map-layout/unlock-button fixes described below ARE present in the
+-   repo (commits `cb9208a`/`43897f0` and earlier). This note in
+-   memory.md was out of date with reality.
+-2. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
++1. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
+    root-caused and fixed via code reasoning, not visual testing —
+-   worth confirming they look right in an actual browser).
+-3. Archive this session's changes into `openspec/` (no proposal was
+-   drafted for this batch — it was a rapid bug-fix pass in response
+-   to direct playtesting feedback, not a planned feature. Worth a
+-   short retroactive change note at minimum.)
+-
+-## Completed (chronological, high-level)
+-See prior entries for the full build history (village MVP → resource
+-economy → quest board/Lucky Wheel/crafting → industrial resources).
+-This session added:
+-
+-1. **Root-caused and fixed two real Lucky Wheel bugs**, not just
+-   symptom patches:
+-   - Segment dividers were invisible — a previous fix tried thin
+-     (1.5°) divider bands baked into the conic-gradient, which
+-     apparently render inconsistently (likely anti-aliased away).
+-     Replaced with actual DOM line elements, one per segment
+-     boundary, which don't have that failure mode.
+-   - Reward mismatch ("I see egg, but it says I won something else")
+-     — the actual bug was a coordinate-math error in label placement:
+-     `translate(radius, -12px)` positions a point near 3-o'clock
+-     *before* rotation, not 12-o'clock, so every label was rotated
+-     into roughly the wrong wedge relative to the color segment
+-     underneath it. The wheel's landing animation was always correct;
+-     only the visible label was wrong. Fixed the translate axes.
+-2. **Found and fixed a real layout bug behind "crafting doesn't
+-   work"**: the crafting panel and the "Press E to interact" prompt
+-   were positioned at identical screen coordinates, directly
+-   overlapping. Not a logic bug — verified crafting's underlying
+-   functions were correct via simulation both before and after.
+-3. **Upgrade costs redesigned**: now require every resource type
+-   currently unlocked at the player's Town Hall level (not a gradual
+-   "one more every 5 levels" rotation, which could mean a level-40
+-   building still ignored resources unlocked ages ago).
+-4. **House capacity increased 50%** (max 10→15/house, new formula
+-   3/6/9/12/15 across 5 levels) to keep pace with the resource-
+-   building count going from 4→6 after Quarry/Mine were added.
+-5. **Map layout tightened and reorganized**: resource cluster packed
+-   into a denser 3×2 grid, Workbench moved next to Town Hall, houses
+-   moved from a separate far corner to cluster right next to Town
+-   Hall too. Collision-verified, zero overlaps.
+-6. **Unlocking is now a deliberate button-click, not auto-on-E** —
+-   matching the same pattern already used for upgrades. A persistent
+-   panel now shows unlock requirements (Town Hall level + cost, with
+-   insufficient resources shown in red) whenever standing near any
+-   locked building/house, with a dedicated Unlock button. E-press on
+-   a locked building now shows info only.
++   worth confirming they look right in an actual browser). Still open
++   — nothing in this session touched the Lucky Wheel visuals, and
++   `main.js`/`render.js` are explicitly NOT covered by the new
++   automated test suite (DOM/Canvas glue — see Testing section below).
++2. Archive prior sessions' changes into `openspec/` (no proposal was
++   drafted for the Lucky Wheel/crafting/layout bug-fix batch — still
++   outstanding, not addressed this session).
++3. Decide egg-upkeep consequences (still a no-op at 0 egg) — unchanged.
++4. Real art integration (still 100% placeholder) — unchanged.
++5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
++   just sit in inventory) — unchanged.
++
++## Testing Infrastructure (New, 2026-07-17)
++**Added a real, persistent automated test suite** — `test/`, using
++Node's built-in `node:test` runner (Node 20+, zero npm dependencies).
++124 tests across 14 suites, one file per pure-logic module:
++`resources`, `buildingLevels`, `buildingUnlocks`, `townHall`,
++`workers`, `upkeep`, `crafting`, `questBoard`, `camera`,
++`interactions`, `interactionHandlers`, `luckyWheel`, `gameState`,
++`map`. Run via `npm test` or `node --test`.
++
++- `test/helpers/localStorage-mock.js`: minimal in-memory
++  `localStorage` polyfill installed on `globalThis`, imported before
++  `gameState.js` in `gameState.test.js` — lets save/load/migration
++  logic run under plain Node with no browser/jsdom.
++- Several tests are explicit regression guards for bugs previously
++  found and fixed in past sessions (documented inline): the
++  flush-before-assign "no backfill production" rule in
++  resources.js/workers.js, upgrade-cost purity (unaffected by
++  unrelated buildings/Town Hall state) in buildingLevels.js, the
++  camera viewport-resize clamp bug, and the edge-distance-not-center
++  interaction-range calculation in interactions.js.
++- `test/map.test.js` replaces the "manually re-derive every
++  interactable's rectangle and confirm no overlaps" pattern several
++  past sessions did by hand each time with a real automated check
++  that runs on every `npm test`.
++- **Explicitly NOT covered**: `main.js`, `render.js`, `sprites.js`,
++  `spriteRenderer.js` — DOM/Canvas glue and visual output. These need
++  browser playtesting, not unit tests; noted in README.md and
++  docs/ARCHITECTURE.md so this isn't mistaken for an oversight later.
++- **Not yet done, worth a future session**: no CI workflow file
++  (e.g. GitHub Actions) exists to run `npm test` automatically on
++  push/PR — currently the suite only runs when someone remembers to
++  invoke it locally. Would meaningfully improve release readiness.
++
++## Bug Found & Fixed via Testing: Stray `grain` Key Never Deleted After Rename Migration (2026-07-17)
++**Found by:** writing `test/gameState.test.js`'s grain→rice migration
++test and checking the *shape* of the migrated result, not just the
++renamed value.
++
++**Root cause:** `migrateOldResourceShape()` in `gameState.js` builds
++the new `carried`/`totalCollected`/`buildingLastCollectedAt` objects
++via `{ ...fresh, ...(rawResources.X || {}) }` — an object spread that
++copies every key from the old save verbatim, including the legacy
++`grain` key. The code below that correctly copies `grain`'s value
++into the new `rice` key, but never removed the original `grain` key
++from the spread result, so every migrated save carried a dead `grain`
++entry forward alongside the new `rice` entry, forever (each subsequent
++autosave just re-persists it).
++
++**Impact:** Low severity in practice — confirmed via grep that
++`main.js` always iterates resources via `RESOURCE_IDS`/explicit ids,
++never `Object.keys(resources.carried)`, so the stray key was never
++displayed or otherwise acted on. It was pure save-data bloat, but
++real: a "new shape" that was supposed to have no `grain` key at all
++(per the code's own comment) actually did.
++
++**Fix:** Added `delete merged.carried.grain` (and the same for
++`totalCollected`/`buildingLastCollectedAt`) immediately after copying
++each value over to `rice`. Three-line change in `js/gameState.js`.
++
++**Verification:** `node --check js/gameState.js` (syntax OK). Full
++test suite: 124/124 passing after the fix (was 123/124 before, with
++the one failure being this exact bug). Also reran `node --check` on
++all 17 `js/*.js` files — all pass.
++
++## Documentation Added (2026-07-17)
++- **`README.md`**: was a single line (`# chicken-saga-village`) before
++  this session. Now covers: fan-project disclaimer, controls, how to
++  run locally (static file server required — ES module imports don't
++  work from `file://`), full project structure with a one-line
++  description of every `js/` file, save-data/migration overview,
++  testing instructions, and contribution/workflow notes (openspec
++  conventions, memory.md as the handoff log).
++- **`docs/ARCHITECTURE.md`** (new): deeper developer-facing doc —
++  pure-logic-vs-presentation-glue module split (and why that split
++  matters for testability), full game state shape reference, the
++  game loop's per-frame order of operations in `main.js`, a
++  named-and-explained write-up of the "offline-safe timestamp
++  checkpoint" pattern used by resource production/upkeep/Lucky Wheel
++  tickets (previously only explained piecemeal in scattered code
++  comments), the full save-migration chain in one place, and a
++  "where to look for what" task→file lookup table.
+ 
+ ## Next Recommended Task
+-Same candidates as last session, still valid (none of this session's
+-work was new-feature work, it was fixes + rebalance):
+-1. Upload this session's fixes to the repo (blocking — see Active Tasks)
+-2. Playtest for balance, especially: Lucky Wheel visuals, the new
+-   "all TH-unlocked resources" upgrade cost (may be steeper than
+-   intended now — worth checking it doesn't make early upgrades feel
+-   punishing), house capacity pacing
+-3. Decide egg-upkeep consequences (still a no-op at 0 egg)
+-4. Real art integration (still 100% placeholder)
+-5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
++1. Real in-browser playtest of: Lucky Wheel visuals, camera resize
++   behavior, upgrade panel red-highlighting/layout — all previously
++   verified only via code reasoning/simulation, never an actual
++   browser (per Active Task #1, carried over from prior sessions).
++2. Add a CI workflow (e.g. `.github/workflows/test.yml`) to run
++   `npm test` automatically on push/PR — the test suite exists now
++   but nothing enforces it gets run.
++3. Archive the Lucky Wheel/crafting/layout bug-fix batch into
++   `openspec/` (carried over, still not done).
++4. Decide egg-upkeep consequences (still a no-op at 0 egg)
++5. Real art integration (still 100% placeholder)
++6. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+    just sit in inventory)
+-6. Hero/dungeon system (non-NFT version) — still just discussed, not
++7. Hero/dungeon system (non-NFT version) — still just discussed, not
+    proposed
+ 
+ ## Decisions
+-(Carried over from prior session, still all in force — no changes
+-this session.)
++(Carried over from prior sessions, still all in force.)
+ - NFT/land ownership/revenue-share/monetization stays deferred
+   pending legal review, full stop.
+ - Kenney.nl (CC0) is the recommended path for real art, not yet
+@@ -98,21 +142,29 @@ this session.)
+ - Resource role split: Egg = worker upkeep. Feathers = reserved for
+   future hero system. Rice/Wood/Stone/Ore = industrial raw→refined
+   lane.
+-- Workflow: developer uploads via GitHub web UI, not git CLI.
++- Workflow: developer uploads via GitHub web UI, not git CLI (per
++  prior sessions' notes — this session committed directly via git CLI
++  since it was working from a fresh clone, not a delivered zip; worth
++  confirming with the developer which workflow is actually in use
++  going forward).
+ - Verification standard: every change gets a per-file syntax check,
+   a full import-graph trace, and functional simulation tests before
+-  being called done — this session is a direct example of why: two
+-  real bugs (wheel label math, panel overlap) were found by reasoning
+-  through the actual code/CSS, not by assuming a prior fix worked.
++  being called done — this session upgrades that standard further:
++  those "functional simulation" checks should now be written as
++  persistent tests in `test/` rather than temp scripts deleted after
++  use, so the verification isn't lost/re-derived from scratch next
++  session.
+ 
+ ## New Decision This Session
+-- **When a bug report says a previous fix "still" isn't working,
+-  re-derive the fix from scratch rather than re-applying the same
+-  patch.** Both wheel bugs this session were previously "fixed" in
+-  an earlier session but the fixes were incomplete/wrong in ways that
+-  weren't caught without a real browser to test in. Default to
+-  suspecting the earlier fix's own correctness, not just staleness of
+-  the build the developer is testing.
++- **Persistent automated tests, not throwaway verification
++  scripts.** Multiple past sessions' "Verification performed" notes
++  describe writing a temp Node script, running it, then deleting it.
++  That worked for one-time confidence but meant the same
++  verification had to be re-derived by hand in later sessions (e.g.
++  "map layout has zero overlaps" was manually re-checked at least
++  twice). Going forward: functional/behavioral verification for
++  `js/*.js` logic changes should become a real `test/*.test.js` file
++  using the existing `node --test` suite, not a deleted script.
+ 
+ ## Backend Engineer Check-In (2026-07-16)
+ Reviewed repo/memory to look for backend work. Confirmed: project is
+@@ -327,3 +379,31 @@ pre-launch checklist exists.
+   updated, and functional simulation across every building/level
+   confirmed the highlighting logic still works against the new cost
+   shape. No code changes made. Files touched: `memory.md` only.
++- **2026-07-17 (Documentation & Testing)**: First dedicated docs/test
++  session. Built a real, persistent test suite (`test/`, Node's
++  built-in `node:test`, zero dependencies) covering all 14 pure-logic
++  modules — 124 tests, several written as explicit regression guards
++  for bugs documented earlier in this file (backfill-on-assign,
++  upgrade-cost purity, camera resize clamp, edge-vs-center interaction
++  distance). Added `test/helpers/localStorage-mock.js` so
++  `gameState.js` save/load/migration logic is testable under plain
++  Node. Running the new suite caught one real (low-severity) bug:
++  `migrateOldResourceShape()` in `gameState.js` never deleted the old
++  `grain` key after copying its value to `rice`, so every migrated
++  save carried a dead `grain` entry forward indefinitely — fixed with
++  a 3-line change (`delete` after each copy), verified via
++  `node --check` + full suite (124/124 passing, was 123/124).
++  Rewrote `README.md` from a one-line placeholder into a full project
++  overview (controls, local-serving instructions, project structure,
++  save/migration notes, testing instructions, contribution notes).
++  Added `docs/ARCHITECTURE.md`: pure-logic-vs-glue module split, full
++  game state shape reference, per-frame game loop order, a named
++  write-up of the "offline-safe timestamp checkpoint" pattern used
++  across resources/upkeep/Lucky Wheel, the complete save-migration
++  chain, and a task→file lookup table. Explicitly documented that
++  `main.js`/`render.js`/`sprites.js`/`spriteRenderer.js` are NOT
++  covered by automated tests (DOM/Canvas glue, needs browser
++  playtesting) so this isn't mistaken for a gap later. Files
++  modified/added: `js/gameState.js` (bug fix), `README.md` (rewrite),
++  `docs/ARCHITECTURE.md` (new), `package.json` (new), `test/*` (new,
++  15 files), `memory.md`.
+diff --git a/package.json b/package.json
+new file mode 100644
+index 0000000..d01f319
+--- /dev/null
++++ b/package.json
+@@ -0,0 +1,14 @@
++{
++  "name": "chicken-saga-village",
++  "version": "0.1.0",
++  "private": true,
++  "description": "Chicken Village — a free, fan-made village builder web game for the Chicken Saga brand. Vanilla JS + HTML5 Canvas, no build step, no backend.",
++  "type": "module",
++  "scripts": {
++    "test": "node --test test/",
++    "serve": "npx --yes http-server -c-1 -p 8080"
++  },
++  "engines": {
++    "node": ">=20"
++  }
++}
+diff --git a/test/buildingLevels.test.js b/test/buildingLevels.test.js
+new file mode 100644
+index 0000000..c5cbced
+--- /dev/null
++++ b/test/buildingLevels.test.js
+@@ -0,0 +1,188 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  RESOURCE_BUILDINGS,
++  HOUSE_IDS,
++  LEVELABLE_BUILDINGS,
++  BASE_UPGRADE_COST,
++  BASE_WORKER_SLOTS,
++  WORKER_SLOTS_PER_LEVEL,
++  MAX_WORKER_SLOTS,
++  MAX_HOUSE_CAPACITY,
++  MAX_HOUSE_LEVEL,
++  isHouse,
++  createBuildingLevelState,
++  getMaxWorkers,
++  rateMultiplierForLevel,
++  getRateMultiplier,
++  capMultiplierForLevel,
++  getCapMultiplier,
++  getHouseCapacity,
++  isHouseMaxed,
++  getUpgradeCost,
++  canUpgradeBuilding,
++  upgradeBuilding
++} from '../js/buildingLevels.js';
++import { createResourceState } from '../js/resources.js';
++
++describe('buildingLevels.js', () => {
++  test('createBuildingLevelState starts every levelable building at level 1', () => {
++    const levels = createBuildingLevelState();
++    for (const id of LEVELABLE_BUILDINGS) {
++      assert.equal(levels[id], 1);
++    }
++  });
++
++  test('isHouse only true for house ids', () => {
++    for (const id of HOUSE_IDS) assert.equal(isHouse(id), true);
++    for (const id of RESOURCE_BUILDINGS) assert.equal(isHouse(id), false);
++  });
++
++  test('getMaxWorkers grows linearly and clamps at MAX_WORKER_SLOTS', () => {
++    const levels = createBuildingLevelState();
++    assert.equal(getMaxWorkers('old_coop', levels), BASE_WORKER_SLOTS);
++    levels.old_coop = 5;
++    assert.equal(getMaxWorkers('old_coop', levels), BASE_WORKER_SLOTS + 4 * WORKER_SLOTS_PER_LEVEL);
++    levels.old_coop = 1000;
++    assert.equal(getMaxWorkers('old_coop', levels), MAX_WORKER_SLOTS);
++  });
++
++  test('rateMultiplierForLevel is 1 at level 1 and continuous across tier boundaries', () => {
++    assert.equal(rateMultiplierForLevel(1), 1);
++    // Tier 1: levels 1-10 @ +0.15/level. Level 10 => 1 + 9*0.15
++    const atTenExpected = 1 + 9 * 0.15;
++    assert.ok(Math.abs(rateMultiplierForLevel(10) - atTenExpected) < 1e-9);
++    // Tier 2 picks up exactly where tier 1 left off at level 11.
++    const atElevenExpected = atTenExpected + 1 * 0.20;
++    assert.ok(Math.abs(rateMultiplierForLevel(11) - atElevenExpected) < 1e-9);
++    // Level 20 -> level 21 crosses into tier 3 (+0.25/level)
++    const atTwentyExpected = atTenExpected + 10 * 0.20;
++    assert.ok(Math.abs(rateMultiplierForLevel(20) - atTwentyExpected) < 1e-9);
++    const atTwentyOneExpected = atTwentyExpected + 1 * 0.25;
++    assert.ok(Math.abs(rateMultiplierForLevel(21) - atTwentyOneExpected) < 1e-9);
++  });
++
++  test('rateMultiplierForLevel is monotonically non-decreasing (no regressions across the whole curve)', () => {
++    let prev = rateMultiplierForLevel(1);
++    for (let lvl = 2; lvl <= 60; lvl++) {
++      const cur = rateMultiplierForLevel(lvl);
++      assert.ok(cur >= prev, `multiplier dropped between level ${lvl - 1} (${prev}) and ${lvl} (${cur})`);
++      prev = cur;
++    }
++  });
++
++  test('getRateMultiplier reads the building\'s own level from the levels map', () => {
++    const levels = createBuildingLevelState();
++    levels.woodshed = 11;
++    assert.equal(getRateMultiplier('woodshed', levels), rateMultiplierForLevel(11));
++  });
++
++  test('capMultiplierForLevel compounds at 1.3^(level-1)', () => {
++    assert.equal(capMultiplierForLevel(1), 1);
++    assert.ok(Math.abs(capMultiplierForLevel(2) - 1.3) < 1e-9);
++    assert.ok(Math.abs(capMultiplierForLevel(11) - Math.pow(1.3, 10)) < 1e-6);
++  });
++
++  test('getHouseCapacity grows per level and clamps at MAX_HOUSE_CAPACITY beyond MAX_HOUSE_LEVEL', () => {
++    const levels = createBuildingLevelState();
++    assert.equal(getHouseCapacity('house_1', levels), 3);
++    levels.house_1 = MAX_HOUSE_LEVEL;
++    assert.equal(getHouseCapacity('house_1', levels), MAX_HOUSE_CAPACITY);
++    levels.house_1 = MAX_HOUSE_LEVEL + 50; // saves shouldn't be able to exceed the cap even if corrupted
++    assert.equal(getHouseCapacity('house_1', levels), MAX_HOUSE_CAPACITY);
++  });
++
++  test('isHouseMaxed flips exactly at MAX_HOUSE_LEVEL', () => {
++    const levels = createBuildingLevelState();
++    levels.house_1 = MAX_HOUSE_LEVEL - 1;
++    assert.equal(isHouseMaxed('house_1', levels), false);
++    levels.house_1 = MAX_HOUSE_LEVEL;
++    assert.equal(isHouseMaxed('house_1', levels), true);
++  });
++
++  test('getUpgradeCost at level 1 equals the base cost exactly (growth^0 = 1)', () => {
++    const levels = createBuildingLevelState();
++    const cost = getUpgradeCost('old_coop', levels);
++    assert.deepEqual(cost, BASE_UPGRADE_COST.old_coop);
++  });
++
++  test('getUpgradeCost is a pure function of the building\'s OWN level — unaffected by unrelated buildings\' levels', () => {
++    // Regression guard for the exact bug documented in memory.md: cost
++    // must never react to Town Hall level or other buildings' state.
++    const levelsA = createBuildingLevelState();
++    levelsA.old_coop = 6;
++    const costA = getUpgradeCost('old_coop', levelsA);
++
++    const levelsB = createBuildingLevelState();
++    levelsB.old_coop = 6;
++    levelsB.mine = 40; // unrelated building far along
++    levelsB.woodshed = 25;
++    const costB = getUpgradeCost('old_coop', levelsB);
++
++    assert.deepEqual(costA, costB);
++  });
++
++  test('getUpgradeCost is deterministic — same building/level always returns the same cost', () => {
++    const levels = createBuildingLevelState();
++    levels.mine = 17;
++    const first = getUpgradeCost('mine', levels);
++    const second = getUpgradeCost('mine', levels);
++    assert.deepEqual(first, second);
++  });
++
++  test('getUpgradeCost adds exactly one new resource type every EXTRA_RESOURCE_LEVEL_INTERVAL (5) levels', () => {
++    const levels = createBuildingLevelState();
++    const baseKeys = Object.keys(BASE_UPGRADE_COST.old_coop).length; // old_coop base = {egg} => 1
++
++    levels.old_coop = 1;
++    assert.equal(Object.keys(getUpgradeCost('old_coop', levels)).length, baseKeys);
++
++    levels.old_coop = 5; // still under interval boundary (floor((5-1)/5)=0)
++    assert.equal(Object.keys(getUpgradeCost('old_coop', levels)).length, baseKeys);
++
++    levels.old_coop = 6; // floor((6-1)/5)=1 -> +1 resource type
++    assert.equal(Object.keys(getUpgradeCost('old_coop', levels)).length, baseKeys + 1);
++
++    levels.old_coop = 11; // floor((11-1)/5)=2 -> +2 resource types
++    assert.equal(Object.keys(getUpgradeCost('old_coop', levels)).length, baseKeys + 2);
++  });
++
++  test('canUpgradeBuilding / upgradeBuilding: succeeds when affordable, spends resources, increments level', () => {
++    const levels = createBuildingLevelState();
++    const resources = createResourceState();
++    resources.carried.egg = 100;
++
++    assert.equal(canUpgradeBuilding('old_coop', levels, resources), true);
++    const result = upgradeBuilding('old_coop', levels, resources);
++    assert.equal(result, true);
++    assert.equal(levels.old_coop, 2);
++    assert.equal(resources.carried.egg, 100 - BASE_UPGRADE_COST.old_coop.egg);
++  });
++
++  test('upgradeBuilding fails and does not mutate state when unaffordable', () => {
++    const levels = createBuildingLevelState();
++    const resources = createResourceState(); // 0 of everything
++    const result = upgradeBuilding('old_coop', levels, resources);
++    assert.equal(result, false);
++    assert.equal(levels.old_coop, 1);
++    assert.equal(resources.carried.egg, 0);
++  });
++
++  test('canUpgradeBuilding is false for a maxed house even with infinite resources', () => {
++    const levels = createBuildingLevelState();
++    levels.house_1 = MAX_HOUSE_LEVEL;
++    const resources = createResourceState();
++    for (const id in resources.carried) resources.carried[id] = 999999;
++    assert.equal(canUpgradeBuilding('house_1', levels, resources), false);
++  });
++
++  test('a maxed house never upgrades even if upgradeBuilding is called directly', () => {
++    const levels = createBuildingLevelState();
++    levels.house_1 = MAX_HOUSE_LEVEL;
++    const resources = createResourceState();
++    for (const id in resources.carried) resources.carried[id] = 999999;
++    const result = upgradeBuilding('house_1', levels, resources);
++    assert.equal(result, false);
++    assert.equal(levels.house_1, MAX_HOUSE_LEVEL);
++  });
++});
+diff --git a/test/buildingUnlocks.test.js b/test/buildingUnlocks.test.js
+new file mode 100644
+index 0000000..feb432e
+--- /dev/null
++++ b/test/buildingUnlocks.test.js
+@@ -0,0 +1,84 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  UNLOCK_CONFIG,
++  createBuildingUnlockState,
++  isBuildingUnlocked,
++  meetsTownHallRequirement,
++  canUnlockBuilding,
++  unlockBuilding
++} from '../js/buildingUnlocks.js';
++import { createResourceState } from '../js/resources.js';
++
++describe('buildingUnlocks.js', () => {
++  test('createBuildingUnlockState pre-unlocks only old_coop and house_1', () => {
++    const state = createBuildingUnlockState();
++    assert.equal(state.old_coop, true);
++    assert.equal(state.house_1, true);
++    for (const id of Object.keys(UNLOCK_CONFIG)) {
++      if (id === 'old_coop' || id === 'house_1') continue;
++      assert.equal(!!state[id], false, `${id} should not be pre-unlocked`);
++    }
++  });
++
++  test('isBuildingUnlocked reflects state truthiness', () => {
++    const state = createBuildingUnlockState();
++    assert.equal(isBuildingUnlocked(state, 'old_coop'), true);
++    assert.equal(isBuildingUnlocked(state, 'mine'), false);
++  });
++
++  test('meetsTownHallRequirement checks the configured gate per building', () => {
++    for (const [id, cfg] of Object.entries(UNLOCK_CONFIG)) {
++      assert.equal(meetsTownHallRequirement(id, cfg.requiresTownHall - 1), false, `${id} should fail one level below its gate`);
++      assert.equal(meetsTownHallRequirement(id, cfg.requiresTownHall), true, `${id} should pass exactly at its gate`);
++    }
++  });
++
++  test('canUnlockBuilding requires both Town Hall level AND affordability', () => {
++    const resources = createResourceState();
++    resources.carried.egg = 100;
++    resources.carried.feathers = 100;
++
++    // mine requires TH5
++    assert.equal(canUnlockBuilding('mine', 1, resources), false, 'should fail TH gate');
++    assert.equal(canUnlockBuilding('mine', 5, resources), false, 'should fail affordability (missing stone)');
++
++    resources.carried.stone = 100;
++    assert.equal(canUnlockBuilding('mine', 5, resources), true);
++  });
++
++  test('canUnlockBuilding returns false for an unknown building id', () => {
++    const resources = createResourceState();
++    assert.equal(canUnlockBuilding('not_a_real_building', 5, resources), false);
++  });
++
++  test('unlockBuilding spends the exact cost and flips the unlock flag; fails cleanly otherwise', () => {
++    const unlockState = createBuildingUnlockState();
++    const resources = createResourceState();
++    resources.carried.egg = 20;
++
++    // nest_bundle requires TH1, cost { egg: 10 }
++    const result = unlockBuilding(unlockState, 'nest_bundle', 1, resources);
++    assert.equal(result, true);
++    assert.equal(unlockState.nest_bundle, true);
++    assert.equal(resources.carried.egg, 10);
++  });
++
++  test('unlockBuilding fails and does not mutate state when unaffordable', () => {
++    const unlockState = createBuildingUnlockState();
++    const resources = createResourceState(); // nothing carried
++    const result = unlockBuilding(unlockState, 'nest_bundle', 1, resources);
++    assert.equal(result, false);
++    assert.equal(!!unlockState.nest_bundle, false);
++    assert.equal(resources.carried.egg, 0);
++  });
++
++  test('every UNLOCK_CONFIG cost resource id exists in RESOURCE_CONFIG (no dangling references)', async () => {
++    const { RESOURCE_CONFIG } = await import('../js/resources.js');
++    for (const [buildingId, cfg] of Object.entries(UNLOCK_CONFIG)) {
++      for (const resId of Object.keys(cfg.cost)) {
++        assert.ok(resId in RESOURCE_CONFIG, `${buildingId}'s unlock cost references unknown resource "${resId}"`);
++      }
++    }
++  });
++});
+diff --git a/test/camera.test.js b/test/camera.test.js
+new file mode 100644
+index 0000000..079f175
+--- /dev/null
++++ b/test/camera.test.js
+@@ -0,0 +1,51 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import { createCamera } from '../js/camera.js';
++
++describe('camera.js', () => {
++  test('follow() centers the viewport on the target when the world is bigger than the viewport', () => {
++    const camera = createCamera(1000, 800, 200, 100);
++    camera.follow(500, 400);
++    assert.equal(camera.x, 500 - 100);
++    assert.equal(camera.y, 400 - 50);
++  });
++
++  test('follow() clamps to 0 at the top-left edge', () => {
++    const camera = createCamera(1000, 800, 200, 100);
++    camera.follow(0, 0);
++    assert.equal(camera.x, 0);
++    assert.equal(camera.y, 0);
++  });
++
++  test('follow() clamps to worldSize - viewportSize at the bottom-right edge', () => {
++    const camera = createCamera(1000, 800, 200, 100);
++    camera.follow(999999, 999999);
++    assert.equal(camera.x, 1000 - 200);
++    assert.equal(camera.y, 800 - 100);
++  });
++
++  test('follow() clamps to 0 (never negative) when the viewport is bigger than the world', () => {
++    const camera = createCamera(100, 100, 500, 500);
++    camera.follow(50, 50);
++    assert.equal(camera.x, 0);
++    assert.equal(camera.y, 0);
++  });
++
++  test('regression: viewportWidth/Height can be updated in place after a resize, and follow() re-clamps against the new size', () => {
++    // This is the exact seam the camera-resize bug (memory.md,
++    // "Code Review: Full Pass") lived in: camera.viewportWidth/Height
++    // must be mutable properties that follow() reads live, not values
++    // baked in at creation time, since main.js updates them directly
++    // on window resize rather than recreating the camera.
++    const camera = createCamera(1000, 800, 400, 400);
++    camera.follow(999999, 999999);
++    assert.equal(camera.x, 1000 - 400);
++
++    // Simulate a window resize shrinking the viewport.
++    camera.viewportWidth = 200;
++    camera.viewportHeight = 200;
++    camera.follow(999999, 999999);
++    assert.equal(camera.x, 1000 - 200, 'camera should clamp to the NEW (smaller) viewport size, not the stale original');
++    assert.equal(camera.y, 800 - 200);
++  });
++});
+diff --git a/test/crafting.test.js b/test/crafting.test.js
+new file mode 100644
+index 0000000..82a8ee6
+--- /dev/null
++++ b/test/crafting.test.js
+@@ -0,0 +1,70 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  RECIPES,
++  createInventoryState,
++  getCraftableRecipes,
++  getRecipeById,
++  craftSpecific
++} from '../js/crafting.js';
++import { createResourceState, RESOURCE_CONFIG } from '../js/resources.js';
++
++describe('crafting.js', () => {
++  test('every recipe cost only references known resources', () => {
++    for (const recipe of RECIPES) {
++      for (const resId of Object.keys(recipe.cost)) {
++        assert.ok(resId in RESOURCE_CONFIG, `recipe "${recipe.id}" references unknown resource "${resId}"`);
++      }
++    }
++  });
++
++  test('recipe ids are unique', () => {
++    const ids = RECIPES.map(r => r.id);
++    assert.equal(new Set(ids).size, ids.length);
++  });
++
++  test('createInventoryState starts empty', () => {
++    assert.deepEqual(createInventoryState(), {});
++  });
++
++  test('getRecipeById finds a real recipe and returns null for an unknown id', () => {
++    assert.equal(getRecipeById('plank').id, 'plank');
++    assert.equal(getRecipeById('does_not_exist'), null);
++  });
++
++  test('getCraftableRecipes only returns recipes the player can currently afford', () => {
++    const resources = createResourceState();
++    assert.deepEqual(getCraftableRecipes(resources), []);
++
++    resources.carried.rice = 5;
++    const craftable = getCraftableRecipes(resources);
++    assert.equal(craftable.length, 1);
++    assert.equal(craftable[0].id, 'chicken_feed');
++  });
++
++  test('craftSpecific spends resources and increments inventory count', () => {
++    const resources = createResourceState();
++    resources.carried.wood = 5;
++    const inventory = createInventoryState();
++
++    const result = craftSpecific(resources, inventory, 'plank');
++    assert.equal(result, true);
++    assert.equal(resources.carried.wood, 0);
++    assert.equal(inventory.plank, 1);
++
++    resources.carried.wood = 5;
++    craftSpecific(resources, inventory, 'plank');
++    assert.equal(inventory.plank, 2, 'crafting the same recipe again should stack the count');
++  });
++
++  test('craftSpecific fails cleanly for an unaffordable or unknown recipe', () => {
++    const resources = createResourceState();
++    const inventory = createInventoryState();
++
++    assert.equal(craftSpecific(resources, inventory, 'plank'), false);
++    assert.deepEqual(inventory, {});
++
++    assert.equal(craftSpecific(resources, inventory, 'not_a_recipe'), false);
++    assert.deepEqual(inventory, {});
++  });
++});
+diff --git a/test/gameState.test.js b/test/gameState.test.js
+new file mode 100644
+index 0000000..4d3d254
+--- /dev/null
++++ b/test/gameState.test.js
+@@ -0,0 +1,149 @@
++import { test, describe, beforeEach } from 'node:test';
++import assert from 'node:assert/strict';
++import './helpers/localStorage-mock.js'; // must be imported before gameState.js
++import { resetLocalStorage } from './helpers/localStorage-mock.js';
++import { createGameState, loadGameState, saveGameState, RESOURCE_IDS } from '../js/gameState.js';
++import { HOUSE_IDS } from '../js/buildingLevels.js';
++
++describe('gameState.js', () => {
++  beforeEach(() => {
++    resetLocalStorage();
++  });
++
++  test('createGameState produces a fully-initialized state with every subsystem present', () => {
++    const state = createGameState();
++    assert.ok(state.resources);
++    assert.ok(state.townHall);
++    assert.ok(state.inventory);
++    assert.ok(state.workers);
++    assert.ok(state.buildingUnlocks);
++    assert.ok(state.buildingLevels);
++    assert.ok(state.questBoard);
++    assert.ok(state.luckyWheel);
++    assert.ok(state.upkeep);
++    assert.equal(state.popularity, 0);
++    assert.equal(state.townHall.level, 1);
++  });
++
++  test('loadGameState with no prior save returns a fresh game state', () => {
++    const state = loadGameState();
++    assert.equal(state.townHall.level, 1);
++    assert.equal(state.resources.carried.egg, 0);
++  });
++
++  test('save -> load round-trip preserves resource, level, and unlock progress exactly', () => {
++    const state = createGameState();
++    state.resources.carried.egg = 42;
++    state.resources.carried.wood = 7;
++    state.townHall.level = 3;
++    state.buildingLevels.old_coop = 6;
++    state.buildingUnlocks.nest_bundle = true;
++    state.workers.assignments.egg = 2;
++    state.popularity = 15;
++
++    saveGameState(state);
++    const loaded = loadGameState();
++
++    assert.equal(loaded.resources.carried.egg, 42);
++    assert.equal(loaded.resources.carried.wood, 7);
++    assert.equal(loaded.townHall.level, 3);
++    assert.equal(loaded.buildingLevels.old_coop, 6);
++    assert.equal(loaded.buildingUnlocks.nest_bundle, true);
++    assert.equal(loaded.workers.assignments.egg, 2);
++    assert.equal(loaded.popularity, 15);
++  });
++
++  test('loadGameState recovers gracefully from corrupted JSON in localStorage', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', '{ this is not valid json');
++    const state = loadGameState();
++    // Should fall back to a fresh game state rather than throwing.
++    assert.equal(state.townHall.level, 1);
++    assert.equal(state.resources.carried.egg, 0);
++  });
++
++  test('loadGameState migrates the pre-resource-economy flat egg fields (carriedEggs/totalEggsCollected)', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      resources: { carriedEggs: 77, totalEggsCollected: 200, coopLastCollectedAt: 123456 }
++    }));
++    const state = loadGameState();
++    assert.equal(state.resources.carried.egg, 77);
++    assert.equal(state.resources.totalCollected.egg, 200);
++    assert.equal(state.resources.buildingLastCollectedAt.egg, 123456);
++    // Every other resource should still be present and zeroed, not missing.
++    for (const id of RESOURCE_IDS) {
++      assert.ok(id in state.resources.carried);
++    }
++  });
++
++  test('loadGameState migrates the grain -> rice resource rename', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      resources: {
++        carried: { egg: 5, grain: 33 },
++        totalCollected: { egg: 5, grain: 50 },
++        buildingLastCollectedAt: { grain: 999 }
++      }
++    }));
++    const state = loadGameState();
++    assert.equal(state.resources.carried.rice, 33);
++    assert.equal(state.resources.totalCollected.rice, 50);
++    assert.equal(state.resources.buildingLastCollectedAt.rice, 999);
++    assert.equal(state.resources.carried.grain, undefined, 'renamed key should not linger in the new shape');
++  });
++
++  test('loadGameState migrates grain_store -> rice_paddy unlock/level state without clobbering an existing rice_paddy entry', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      buildingUnlocks: { grain_store: true },
++      buildingLevels: { grain_store: 4 }
++    }));
++    const state = loadGameState();
++    assert.equal(state.buildingUnlocks.rice_paddy, true);
++    assert.equal(state.buildingLevels.rice_paddy, 4);
++  });
++
++  test('loadGameState infers buildingUnlocks for pre-buildingUnlocks saves from production evidence', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      resources: {
++        carried: { egg: 0, feathers: 0, wood: 5 },
++        totalCollected: { egg: 0, feathers: 0, wood: 12 }
++      },
++      inventory: { plank: 1 }
++      // no buildingUnlocks key at all — simulates a save from before that system existed
++    }));
++    const state = loadGameState();
++    assert.equal(state.buildingUnlocks.woodshed, true, 'wood ever collected implies woodshed was unlocked');
++    assert.equal(state.buildingUnlocks.workbench, true, 'having inventory items implies workbench was unlocked');
++    assert.equal(!!state.buildingUnlocks.nest_bundle, false, 'no feathers ever collected implies nest_bundle was not unlocked');
++  });
++
++  test('loadGameState migrates a legacy flat "houses" count into individual house_N unlocks', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      workers: { houses: 3, assignments: { egg: 1 } }
++    }));
++    const state = loadGameState();
++    assert.equal(state.buildingUnlocks.house_1, true);
++    assert.equal(state.buildingUnlocks.house_2, true);
++    assert.equal(state.buildingUnlocks.house_3, true);
++    assert.equal(!!state.buildingUnlocks.house_4, false);
++    assert.equal(!!state.buildingUnlocks.house_5, false);
++  });
++
++  test('loadGameState never unlocks more houses than actually exist, even from a corrupted/inflated legacy count', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      workers: { houses: 999 }
++    }));
++    const state = loadGameState();
++    for (const id of HOUSE_IDS) {
++      assert.equal(state.buildingUnlocks[id], true);
++    }
++    assert.equal(Object.keys(state.buildingUnlocks).filter(k => HOUSE_IDS.includes(k)).length, HOUSE_IDS.length);
++  });
++
++  test('loadGameState clamps legacy over-cap worker assignments down to the new level-based per-building caps', () => {
++    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
++      workers: { assignments: { egg: 999 } }, // old flat cap of 10, now way over any real cap
++      buildingLevels: { old_coop: 1 } // level 1 -> max 3 workers
++    }));
++    const state = loadGameState();
++    assert.equal(state.workers.assignments.egg, 3);
++  });
++});
+diff --git a/test/helpers/localStorage-mock.js b/test/helpers/localStorage-mock.js
+new file mode 100644
+index 0000000..ac7e9d4
+--- /dev/null
++++ b/test/helpers/localStorage-mock.js
+@@ -0,0 +1,45 @@
++// localStorage-mock.js — gameState.js calls the browser's global
++// localStorage directly (no dependency injection), since it's a
++// static, no-build-step, vanilla-JS game meant to run straight from
++// index.html. To unit-test save/load logic under Node's built-in test
++// runner (no browser, no jsdom dependency), this installs a minimal
++// in-memory localStorage on `globalThis` before gameState.js is
++// imported.
++//
++// Usage in a test file:
++//   import './helpers/localStorage-mock.js'; // side-effecting import, must be first
++//   import { loadGameState, saveGameState } from '../js/gameState.js';
++
++class MemoryStorage {
++  constructor() {
++    this._data = new Map();
++  }
++  getItem(key) {
++    return this._data.has(key) ? this._data.get(key) : null;
++  }
++  setItem(key, value) {
++    this._data.set(key, String(value));
++  }
++  removeItem(key) {
++    this._data.delete(key);
++  }
++  clear() {
++    this._data.clear();
++  }
++  get length() {
++    return this._data.size;
++  }
++  key(index) {
++    return Array.from(this._data.keys())[index] ?? null;
++  }
++}
++
++if (!globalThis.localStorage) {
++  globalThis.localStorage = new MemoryStorage();
++}
++
++// Exported so tests can reset state between cases without leaking a
++// save from one test into the next.
++export function resetLocalStorage() {
++  globalThis.localStorage.clear();
++}
+diff --git a/test/interactionHandlers.test.js b/test/interactionHandlers.test.js
+new file mode 100644
+index 0000000..593dff5
+--- /dev/null
++++ b/test/interactionHandlers.test.js
+@@ -0,0 +1,67 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import { HANDLERS, BUILDING_RESOURCE } from '../js/interactionHandlers.js';
++import { createGameState } from '../js/gameState.js';
++import { interactables } from '../js/map.js';
++
++describe('interactionHandlers.js', () => {
++  test('every map interactable has a matching HANDLERS entry (no dead E-press)', () => {
++    for (const obj of interactables) {
++      assert.ok(HANDLERS[obj.id], `no interact handler registered for map object "${obj.id}"`);
++    }
++  });
++
++  test('a locked, below-Town-Hall-level building reports its Town Hall requirement, not its resource cost', () => {
++    const gameState = createGameState(); // TH1, woodshed locked (requires TH4)
++    const result = HANDLERS.woodshed.interact(gameState);
++    assert.match(result.text, /Requires Town Hall level 4/);
++  });
++
++  test('a locked building that DOES meet the Town Hall gate reports its unlock cost instead', () => {
++    const gameState = createGameState();
++    gameState.townHall.level = 4; // woodshed requires TH4, meets it but still not unlocked
++    const result = HANDLERS.woodshed.interact(gameState);
++    assert.match(result.text, /Needs .* to unlock/);
++  });
++
++  test('an unlocked resource building with no assigned workers reports nothing is being produced', () => {
++    const gameState = createGameState();
++    gameState.buildingUnlocks.old_coop = true; // already true by default, explicit for clarity
++    const result = HANDLERS.old_coop.interact(gameState);
++    assert.match(result.text, /No workers assigned/);
++  });
++
++  test('an unlocked resource building with workers and accrued production returns a floating collect amount', () => {
++    const gameState = createGameState();
++    gameState.workers.assignments.egg = 1;
++    gameState.resources.buildingLastCollectedAt.egg = Date.now() - 20000; // 20s accrued
++    const result = HANDLERS.old_coop.interact(gameState);
++    assert.ok(result.floatingAmount > 0);
++    assert.equal(result.floatingIcon, '🥚');
++    assert.match(result.text, /^Collected \d+!/);
++  });
++
++  test('town_hall handler reports max level text once MAX_TOWN_HALL_LEVEL is reached', async () => {
++    const { MAX_TOWN_HALL_LEVEL } = await import('../js/townHall.js');
++    const gameState = createGameState();
++    gameState.townHall.level = MAX_TOWN_HALL_LEVEL;
++    const result = HANDLERS.town_hall.interact(gameState);
++    assert.match(result.text, /Max level/);
++  });
++
++  test('farmer_npc handler auto-claims every ready quest and lists remaining ones', () => {
++    const gameState = createGameState();
++    gameState.workers.assignments.egg = 1; // satisfies "assign_worker" quest
++    const result = HANDLERS.farmer_npc.interact(gameState);
++    assert.match(result.text, /Completed:/);
++    assert.ok(gameState.questBoard.claimedQuestIds.includes('assign_worker'));
++    // Should not double-claim on a second interact.
++    const result2 = HANDLERS.farmer_npc.interact(gameState);
++    assert.doesNotMatch(result2.text, /assign_worker/i);
++  });
++
++  test('BUILDING_RESOURCE keys match RESOURCE_BUILDINGS exactly', async () => {
++    const { RESOURCE_BUILDINGS } = await import('../js/buildingLevels.js');
++    assert.deepEqual(Object.keys(BUILDING_RESOURCE).sort(), [...RESOURCE_BUILDINGS].sort());
++  });
++});
+diff --git a/test/interactions.test.js b/test/interactions.test.js
+new file mode 100644
+index 0000000..a4229a2
+--- /dev/null
++++ b/test/interactions.test.js
+@@ -0,0 +1,63 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  findNearestInteractable,
++  createDialogueState,
++  openDialogue,
++  closeDialogue
++} from '../js/interactions.js';
++
++function rect(id, x, y, width, height, interactRadius) {
++  return { id, name: id, x, y, width, height, interactRadius, dialogue: `dialogue for ${id}` };
++}
++
++describe('interactions.js', () => {
++  test('findNearestInteractable returns null when nothing is in range', () => {
++    const objs = [rect('a', 1000, 1000, 50, 50, 10)];
++    const result = findNearestInteractable({ x: 0, y: 0 }, objs);
++    assert.equal(result, null);
++  });
++
++  test('findNearestInteractable measures distance to the nearest EDGE, not the center (large-building regression guard)', () => {
++    // A large 3x3 building: center distance would wrongly exceed the
++    // radius on the near side. Player stands just outside the left edge.
++    const bigBuilding = rect('town_hall', 100, 100, 300, 300, 20);
++    // Player is 10px to the left of the building's left edge, vertically centered.
++    const player = { x: 90, y: 250 };
++    const result = findNearestInteractable(player, [bigBuilding]);
++    assert.equal(result.id, 'town_hall', 'should be in range via edge distance even though far from center');
++  });
++
++  test('findNearestInteractable returns null just outside the radius (edge-distance boundary)', () => {
++    const building = rect('b', 100, 100, 50, 50, 10);
++    // Left edge is at x=100; radius 10 means x=89 (11px away) should be out of range.
++    const player = { x: 89, y: 125 };
++    assert.equal(findNearestInteractable(player, [building]), null);
++  });
++
++  test('findNearestInteractable picks the closest of several in-range candidates', () => {
++    const far = rect('far', 50, 0, 10, 10, 100);   // nearest edge at x=50, distance 50
++    const near = rect('near', 10, 0, 5, 5, 100);   // nearest edge at x=10, distance 10
++    const result = findNearestInteractable({ x: 0, y: 0 }, [far, near]);
++    assert.equal(result.id, 'near');
++  });
++
++  test('findNearestInteractable treats a point inside the rectangle as distance 0', () => {
++    const building = rect('inside', 0, 0, 100, 100, 5);
++    const result = findNearestInteractable({ x: 50, y: 50 }, [building]);
++    assert.equal(result.id, 'inside');
++  });
++
++  test('dialogue state: create -> open -> close lifecycle', () => {
++    const state = createDialogueState();
++    assert.equal(state.open, false);
++
++    openDialogue(state, { name: 'Farmer Joe', dialogue: 'Howdy!' });
++    assert.equal(state.open, true);
++    assert.equal(state.title, 'Farmer Joe');
++    assert.equal(state.text, 'Howdy!');
++
++    closeDialogue(state);
++    assert.equal(state.open, false);
++  });
++});
+diff --git a/test/luckyWheel.test.js b/test/luckyWheel.test.js
+new file mode 100644
+index 0000000..456df82
+--- /dev/null
++++ b/test/luckyWheel.test.js
+@@ -0,0 +1,134 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  TICKET_INTERVAL_MS,
++  BASE_TICKET_CAP,
++  TICKET_CAP_PER_TH_LEVEL,
++  REWARD_TABLE,
++  createLuckyWheelState,
++  isLuckyWheelUnlocked,
++  getTicketCap,
++  syncTickets,
++  getMsUntilNextTicket,
++  getRewardScale,
++  spinWheel
++} from '../js/luckyWheel.js';
++import { createResourceState } from '../js/resources.js';
++
++describe('luckyWheel.js', () => {
++  test('every REWARD_TABLE entry references a known resource', async () => {
++    const { RESOURCE_CONFIG } = await import('../js/resources.js');
++    for (const entry of REWARD_TABLE) {
++      assert.ok(entry.resource in RESOURCE_CONFIG, `reward table references unknown resource "${entry.resource}"`);
++    }
++  });
++
++  test('isLuckyWheelUnlocked gates at Town Hall 2', () => {
++    assert.equal(isLuckyWheelUnlocked(1), false);
++    assert.equal(isLuckyWheelUnlocked(2), true);
++    assert.equal(isLuckyWheelUnlocked(5), true);
++  });
++
++  test('getTicketCap is 0 below TH2, BASE_TICKET_CAP at TH2, and grows per level after', () => {
++    assert.equal(getTicketCap(1), 0);
++    assert.equal(getTicketCap(2), BASE_TICKET_CAP);
++    assert.equal(getTicketCap(3), BASE_TICKET_CAP + TICKET_CAP_PER_TH_LEVEL);
++    assert.equal(getTicketCap(5), BASE_TICKET_CAP + 3 * TICKET_CAP_PER_TH_LEVEL);
++  });
++
++  test('syncTickets grants one ticket per elapsed TICKET_INTERVAL_MS, preserving leftover partial time', () => {
++    const state = createLuckyWheelState();
++    const start = state.lastGeneratedAt;
++
++    syncTickets(state, start + TICKET_INTERVAL_MS * 2.5, 2);
++    assert.equal(state.tickets, 2);
++    // 0.5 interval of "leftover" time should be preserved in lastGeneratedAt,
++    // not discarded — checkpoint should have advanced by exactly 2 intervals.
++    assert.equal(state.lastGeneratedAt, start + TICKET_INTERVAL_MS * 2);
++  });
++
++  test('syncTickets clamps at the town-hall-level ticket cap', () => {
++    const state = createLuckyWheelState();
++    const start = state.lastGeneratedAt;
++    syncTickets(state, start + TICKET_INTERVAL_MS * 1000, 2); // way more than cap
++    assert.equal(state.tickets, getTicketCap(2));
++  });
++
++  test('syncTickets is a no-op once already at cap, and just re-checkpoints "now"', () => {
++    const state = createLuckyWheelState();
++    state.tickets = getTicketCap(2);
++    const now = state.lastGeneratedAt + 999999;
++    syncTickets(state, now, 2);
++    assert.equal(state.tickets, getTicketCap(2));
++    assert.equal(state.lastGeneratedAt, now);
++  });
++
++  test('getMsUntilNextTicket reports atCap once tickets are maxed', () => {
++    const state = createLuckyWheelState();
++    state.tickets = getTicketCap(2);
++    const result = getMsUntilNextTicket(state, Date.now(), 2);
++    assert.equal(result.atCap, true);
++    assert.equal(result.msRemaining, 0);
++  });
++
++  test('getMsUntilNextTicket counts down correctly mid-interval', () => {
++    const state = createLuckyWheelState();
++    const start = state.lastGeneratedAt;
++    const now = start + TICKET_INTERVAL_MS * 0.25;
++    const result = getMsUntilNextTicket(state, now, 2);
++    assert.equal(result.atCap, false);
++    assert.ok(Math.abs(result.msRemaining - TICKET_INTERVAL_MS * 0.75) < 5);
++  });
++
++  test('getRewardScale: TH2=1x, TH3=1.75x, TH4=2.5x, TH5=3.25x (per luckyWheel.js design comment)', () => {
++    assert.equal(getRewardScale(2), 1);
++    assert.equal(getRewardScale(3), 1.75);
++    assert.equal(getRewardScale(4), 2.5);
++    assert.equal(getRewardScale(5), 3.25);
++  });
++
++  test('spinWheel returns null and does not mutate state when there are no tickets', () => {
++    const state = createLuckyWheelState();
++    const resources = createResourceState();
++    const result = spinWheel(state, resources, Date.now(), 2);
++    assert.equal(result, null);
++    assert.equal(state.totalSpins, 0);
++  });
++
++  test('spinWheel consumes one ticket, increments totalSpins, and grants a scaled resource reward', () => {
++    const state = createLuckyWheelState();
++    state.tickets = 1;
++    const resources = createResourceState();
++    const before = { ...resources.carried };
++
++    const result = spinWheel(state, resources, Date.now(), 3); // TH3 => 1.75x scale
++    assert.ok(result, 'spin should succeed with a ticket available');
++    assert.equal(state.tickets, 0);
++    assert.equal(state.totalSpins, 1);
++    assert.ok(REWARD_TABLE.includes(result.baseEntry));
++    assert.equal(result.amount, Math.max(1, Math.round(result.baseEntry.amount * 1.75)));
++    assert.equal(resources.carried[result.resource], before[result.resource] + result.amount);
++    assert.equal(resources.totalCollected[result.resource], result.amount);
++  });
++
++  test('spinWheel never mutates the shared REWARD_TABLE itself', () => {
++    const state = createLuckyWheelState();
++    state.tickets = 1;
++    const resources = createResourceState();
++    const snapshot = JSON.parse(JSON.stringify(REWARD_TABLE));
++
++    spinWheel(state, resources, Date.now(), 5);
++    assert.deepEqual(REWARD_TABLE, snapshot);
++  });
++
++  test('spinWheel amount is always at least 1, sampled across the weighted table at TH2 (1x scale)', () => {
++    const state = createLuckyWheelState();
++    const resources = createResourceState();
++
++    for (let i = 0; i < 200; i++) {
++      state.tickets = 1;
++      const result = spinWheel(state, resources, Date.now(), 2);
++      assert.ok(result.amount >= 1, `got a spin amount below 1: ${result.amount}`);
++    }
++  });
++});
+diff --git a/test/map.test.js b/test/map.test.js
+new file mode 100644
+index 0000000..64be874
+--- /dev/null
++++ b/test/map.test.js
+@@ -0,0 +1,57 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import { mapGrid, interactables, MAP_COLS, MAP_ROWS } from '../js/map.js';
++import { TILE_IDS, RENDERED_TILE_SIZE } from '../js/tileConfig.js';
++
++function rectsOverlap(a, b) {
++  return a.x < b.x + b.width && a.x + a.width > b.x &&
++         a.y < b.y + b.height && a.y + a.height > b.y;
++}
++
++describe('map.js layout integrity', () => {
++  test('interactable ids are unique', () => {
++    const ids = interactables.map(o => o.id);
++    assert.equal(new Set(ids).size, ids.length);
++  });
++
++  test('no two interactable footprints overlap each other', () => {
++    // Regression guard for the layout claim in memory.md ("tightened,
++    // zero overlaps") — re-derived independently here so it's checked
++    // on every run instead of trusted from a prior session's notes.
++    const overlaps = [];
++    for (let i = 0; i < interactables.length; i++) {
++      for (let j = i + 1; j < interactables.length; j++) {
++        if (rectsOverlap(interactables[i], interactables[j])) {
++          overlaps.push(`${interactables[i].id} <-> ${interactables[j].id}`);
++        }
++      }
++    }
++    assert.deepEqual(overlaps, []);
++  });
++
++  test('every interactable footprint stays within the map bounds', () => {
++    const worldWidth = MAP_COLS * RENDERED_TILE_SIZE;
++    const worldHeight = MAP_ROWS * RENDERED_TILE_SIZE;
++    for (const obj of interactables) {
++      assert.ok(obj.x >= 0 && obj.y >= 0, `${obj.id} starts outside the map (negative coordinate)`);
++      assert.ok(obj.x + obj.width <= worldWidth, `${obj.id} extends past the right map edge`);
++      assert.ok(obj.y + obj.height <= worldHeight, `${obj.id} extends past the bottom map edge`);
++    }
++  });
++
++  test('mapGrid has the declared MAP_ROWS x MAP_COLS dimensions', () => {
++    assert.equal(mapGrid.length, MAP_ROWS);
++    for (const row of mapGrid) assert.equal(row.length, MAP_COLS);
++  });
++
++  test('the outer ring of the map is all TREE tiles (world border)', () => {
++    for (let c = 0; c < MAP_COLS; c++) {
++      assert.equal(mapGrid[0][c], TILE_IDS.TREE, `top row col ${c} should be TREE`);
++      assert.equal(mapGrid[MAP_ROWS - 1][c], TILE_IDS.TREE, `bottom row col ${c} should be TREE`);
++    }
++    for (let r = 0; r < MAP_ROWS; r++) {
++      assert.equal(mapGrid[r][0], TILE_IDS.TREE, `left col row ${r} should be TREE`);
++      assert.equal(mapGrid[r][MAP_COLS - 1], TILE_IDS.TREE, `right col row ${r} should be TREE`);
++    }
++  });
++});
+diff --git a/test/questBoard.test.js b/test/questBoard.test.js
+new file mode 100644
+index 0000000..e06f2a6
+--- /dev/null
++++ b/test/questBoard.test.js
+@@ -0,0 +1,62 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  QUEST_LIST,
++  createQuestBoardState,
++  getAvailableQuests,
++  getReadyToClaimQuests,
++  claimQuest
++} from '../js/questBoard.js';
++import { createGameState } from '../js/gameState.js';
++
++describe('questBoard.js', () => {
++  test('quest ids are unique', () => {
++    const ids = QUEST_LIST.map(q => q.id);
++    assert.equal(new Set(ids).size, ids.length);
++  });
++
++  test('every quest reward only references known resources', async () => {
++    const { RESOURCE_CONFIG } = await import('../js/resources.js');
++    for (const quest of QUEST_LIST) {
++      for (const resId of Object.keys(quest.reward)) {
++        assert.ok(resId in RESOURCE_CONFIG, `quest "${quest.id}" reward references unknown resource "${resId}"`);
++      }
++    }
++  });
++
++  test('createQuestBoardState starts with no claimed quests', () => {
++    assert.deepEqual(createQuestBoardState().claimedQuestIds, []);
++  });
++
++  test('getAvailableQuests excludes already-claimed quests', () => {
++    const state = createQuestBoardState();
++    state.claimedQuestIds.push('assign_worker');
++    const available = getAvailableQuests(state);
++    assert.equal(available.some(q => q.id === 'assign_worker'), false);
++    assert.equal(available.length, QUEST_LIST.length - 1);
++  });
++
++  test('getReadyToClaimQuests only returns quests whose check() passes against the live game state', () => {
++    const gameState = createGameState();
++    assert.equal(getReadyToClaimQuests(gameState).length, 0);
++
++    gameState.workers.assignments.egg = 1; // satisfies "assign_worker"
++    const ready = getReadyToClaimQuests(gameState);
++    assert.equal(ready.length, 1);
++    assert.equal(ready[0].id, 'assign_worker');
++  });
++
++  test('claimQuest grants the reward and marks the quest permanently claimed', () => {
++    const gameState = createGameState();
++    const quest = QUEST_LIST.find(q => q.id === 'collect_eggs');
++    const before = gameState.resources.carried.egg;
++
++    claimQuest(gameState, quest);
++    assert.equal(gameState.resources.carried.egg, before + quest.reward.egg);
++    assert.equal(gameState.resources.totalCollected.egg, quest.reward.egg);
++    assert.ok(gameState.questBoard.claimedQuestIds.includes('collect_eggs'));
++
++    // A claimed quest should no longer show up as available.
++    assert.equal(getAvailableQuests(gameState.questBoard).some(q => q.id === 'collect_eggs'), false);
++  });
++});
+diff --git a/test/resources.test.js b/test/resources.test.js
+new file mode 100644
+index 0000000..538ca0f
+--- /dev/null
++++ b/test/resources.test.js
+@@ -0,0 +1,142 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  RESOURCE_CONFIG,
++  RESOURCE_IDS,
++  createResourceState,
++  isResourceUnlocked,
++  getBuildingStored,
++  getEffectiveRatePerSecond,
++  flushAndResetCheckpoint,
++  collectFromBuilding,
++  canAfford,
++  spendResources
++} from '../js/resources.js';
++
++describe('resources.js', () => {
++  test('createResourceState initializes every resource id to zero', () => {
++    const state = createResourceState();
++    for (const id of RESOURCE_IDS) {
++      assert.equal(state.carried[id], 0);
++      assert.equal(state.totalCollected[id], 0);
++      assert.equal(typeof state.buildingLastCollectedAt[id], 'number');
++    }
++  });
++
++  test('isResourceUnlocked respects each resource\'s Town Hall gate', () => {
++    for (const id of RESOURCE_IDS) {
++      const gate = RESOURCE_CONFIG[id].unlockedAtTownHall;
++      if (gate > 1) {
++        assert.equal(isResourceUnlocked(id, gate - 1), false, `${id} should be locked below TH${gate}`);
++      }
++      assert.equal(isResourceUnlocked(id, gate), true, `${id} should unlock exactly at TH${gate}`);
++      assert.equal(isResourceUnlocked(id, gate + 1), true, `${id} should stay unlocked above TH${gate}`);
++    }
++  });
++
++  test('getBuildingStored returns 0 with no assigned workers, regardless of elapsed time', () => {
++    const state = createResourceState();
++    state.buildingLastCollectedAt.egg = Date.now() - 100000;
++    assert.equal(getBuildingStored(state, 'egg', Date.now(), 0), 0);
++  });
++
++  test('getBuildingStored accrues linearly with elapsed time and worker bonus', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 10000; // 10s elapsed
++    // rate=0.5/s, 1 worker => *1.05 multiplier, rateMultiplier=1
++    const stored = getBuildingStored(state, 'egg', now, 1, 1, 1);
++    assert.ok(Math.abs(stored - 0.5 * 1.05 * 10) < 1e-9, `expected ~5.25, got ${stored}`);
++  });
++
++  test('getBuildingStored clamps to the effective cap', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 100000000; // huge elapsed time
++    const stored = getBuildingStored(state, 'egg', now, 1, 1, 1);
++    assert.equal(stored, RESOURCE_CONFIG.egg.cap * 1);
++  });
++
++  test('getBuildingStored scales cap with capMultiplier independent of rateMultiplier', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 100000000;
++    const stored = getBuildingStored(state, 'egg', now, 1, 1, 2);
++    assert.equal(stored, RESOURCE_CONFIG.egg.cap * 2);
++  });
++
++  test('getEffectiveRatePerSecond is 0 with no workers, scales with rateMultiplier and worker bonus otherwise', () => {
++    assert.equal(getEffectiveRatePerSecond('egg', 0, 5), 0);
++    const rate = getEffectiveRatePerSecond('egg', 3, 2);
++    assert.ok(Math.abs(rate - (0.5 * 2 * (1 + 3 * 0.05))) < 1e-9);
++  });
++
++  test('flushAndResetCheckpoint collects whole units at OLD worker count and resets timestamp', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 20000; // 20s @ rate 0.5 = 10 eggs
++    flushAndResetCheckpoint(state, 'egg', now, 1, 1, 1);
++    assert.equal(state.carried.egg, 10); // 0.5 * 1.05 * 20 = 10.5, floored to 10
++    assert.equal(state.totalCollected.egg, 10);
++    assert.equal(state.buildingLastCollectedAt.egg, now);
++  });
++
++  test('flushAndResetCheckpoint does not backfill production for a building that just got its first worker', () => {
++    // Regression guard for the exact bug flushAndResetCheckpoint's own
++    // comment describes: an idle (0-worker) building sitting for a
++    // long time should NOT retroactively earn production the instant
++    // a worker is assigned.
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 3600000; // idle for 1 hour
++    flushAndResetCheckpoint(state, 'egg', now, /* assignedWorkersBeforeChange */ 0, 1, 1);
++    assert.equal(state.carried.egg, 0);
++    assert.equal(state.buildingLastCollectedAt.egg, now);
++  });
++
++  test('collectFromBuilding returns 0 and does not mutate state if resource is not yet unlocked', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.wood = now - 100000;
++    const before = state.carried.wood;
++    const collected = collectFromBuilding(state, 'wood', now, /* townHallLevel */ 1, 5, 1, 1);
++    assert.equal(collected, 0);
++    assert.equal(state.carried.wood, before);
++  });
++
++  test('collectFromBuilding collects and updates carried/totalCollected/timestamp together', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now - 20000;
++    const collected = collectFromBuilding(state, 'egg', now, 1, 1, 1, 1);
++    assert.equal(collected, 10);
++    assert.equal(state.carried.egg, 10);
++    assert.equal(state.totalCollected.egg, 10);
++    assert.equal(state.buildingLastCollectedAt.egg, now);
++  });
++
++  test('collectFromBuilding returns 0 without mutating timestamp when nothing has accrued yet', () => {
++    const state = createResourceState();
++    const now = Date.now();
++    state.buildingLastCollectedAt.egg = now; // just reset, nothing elapsed
++    const collected = collectFromBuilding(state, 'egg', now, 1, 1, 1, 1);
++    assert.equal(collected, 0);
++    assert.equal(state.buildingLastCollectedAt.egg, now);
++  });
++
++  test('canAfford / spendResources agree on affordability and spend is exact', () => {
++    const state = createResourceState();
++    state.carried.egg = 20;
++    state.carried.feathers = 5;
++    assert.equal(canAfford(state, { egg: 20, feathers: 5 }), true);
++    assert.equal(canAfford(state, { egg: 21 }), false);
++    spendResources(state, { egg: 20, feathers: 5 });
++    assert.equal(state.carried.egg, 0);
++    assert.equal(state.carried.feathers, 0);
++  });
++
++  test('canAfford treats an empty cost dict as always affordable', () => {
++    const state = createResourceState();
++    assert.equal(canAfford(state, {}), true);
++  });
++});
+diff --git a/test/townHall.test.js b/test/townHall.test.js
+new file mode 100644
+index 0000000..d022424
+--- /dev/null
++++ b/test/townHall.test.js
+@@ -0,0 +1,77 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  MAX_TOWN_HALL_LEVEL,
++  UPGRADE_COSTS,
++  createTownHallState,
++  getUpgradeCost,
++  canUpgrade,
++  upgradeTownHall
++} from '../js/townHall.js';
++import { createResourceState, RESOURCE_CONFIG } from '../js/resources.js';
++
++describe('townHall.js', () => {
++  test('createTownHallState starts at level 1', () => {
++    assert.equal(createTownHallState().level, 1);
++  });
++
++  test('getUpgradeCost returns null at/above MAX_TOWN_HALL_LEVEL (no cost entry defined)', () => {
++    const state = { level: MAX_TOWN_HALL_LEVEL };
++    assert.equal(getUpgradeCost(state), null);
++  });
++
++  test('canUpgrade is false once at MAX_TOWN_HALL_LEVEL, even with unlimited resources', () => {
++    const state = { level: MAX_TOWN_HALL_LEVEL };
++    const resources = createResourceState();
++    for (const id in resources.carried) resources.carried[id] = 999999;
++    assert.equal(canUpgrade(state, resources), false);
++  });
++
++  test('canUpgrade / upgradeTownHall: succeeds when affordable, spends cost, increments level', () => {
++    const state = createTownHallState();
++    const resources = createResourceState();
++    resources.carried.egg = 100;
++    resources.carried.feathers = 100;
++
++    assert.equal(canUpgrade(state, resources), true);
++    const result = upgradeTownHall(state, resources);
++    assert.equal(result, true);
++    assert.equal(state.level, 2);
++    assert.equal(resources.carried.egg, 100 - UPGRADE_COSTS[1].egg);
++    assert.equal(resources.carried.feathers, 100 - UPGRADE_COSTS[1].feathers);
++  });
++
++  test('upgradeTownHall fails and does not mutate state when unaffordable', () => {
++    const state = createTownHallState();
++    const resources = createResourceState();
++    const result = upgradeTownHall(state, resources);
++    assert.equal(result, false);
++    assert.equal(state.level, 1);
++  });
++
++  test('every UPGRADE_COSTS entry only references resources unlocked at that level (per townHall.js design comment)', () => {
++    for (const [levelStr, cost] of Object.entries(UPGRADE_COSTS)) {
++      const level = Number(levelStr);
++      for (const resId of Object.keys(cost)) {
++        const gate = RESOURCE_CONFIG[resId].unlockedAtTownHall;
++        assert.ok(gate <= level, `TH${level} upgrade cost references "${resId}" (unlocks at TH${gate}) before it's available`);
++      }
++    }
++  });
++
++  test('a full 1 -> MAX_TOWN_HALL_LEVEL upgrade run works given ample resources of every kind', () => {
++    const state = createTownHallState();
++    const resources = createResourceState();
++    for (const id in resources.carried) resources.carried[id] = 999999;
++
++    let upgrades = 0;
++    while (canUpgrade(state, resources)) {
++      const ok = upgradeTownHall(state, resources);
++      assert.equal(ok, true);
++      upgrades += 1;
++      if (upgrades > MAX_TOWN_HALL_LEVEL + 1) break; // safety valve against infinite loop bugs
++    }
++    assert.equal(state.level, MAX_TOWN_HALL_LEVEL);
++    assert.equal(upgrades, MAX_TOWN_HALL_LEVEL - 1);
++  });
++});
+diff --git a/test/upkeep.test.js b/test/upkeep.test.js
+new file mode 100644
+index 0000000..1b7083e
+--- /dev/null
++++ b/test/upkeep.test.js
+@@ -0,0 +1,73 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import { EGG_UPKEEP_PER_WORKER_PER_MINUTE, createUpkeepState, applyUpkeep } from '../js/upkeep.js';
++import { createResourceState } from '../js/resources.js';
++import { createWorkerState } from '../js/workers.js';
++
++describe('upkeep.js', () => {
++  test('createUpkeepState starts checkpointed at "now"', () => {
++    const before = Date.now();
++    const state = createUpkeepState();
++    const after = Date.now();
++    assert.ok(state.lastCheckedAt >= before && state.lastCheckedAt <= after);
++  });
++
++  test('applyUpkeep is a no-op (but advances the checkpoint) when nobody is assigned', () => {
++    const upkeep = createUpkeepState();
++    const resources = createResourceState();
++    resources.carried.egg = 50;
++    const workers = createWorkerState(); // all assignments 0
++    const now = Date.now() + 999999;
++
++    const consumed = applyUpkeep(upkeep, resources, workers, now);
++    assert.equal(consumed, 0);
++    assert.equal(resources.carried.egg, 50);
++    assert.equal(upkeep.lastCheckedAt, now);
++  });
++
++  test('applyUpkeep consumes egg proportional to assigned workers and elapsed time', () => {
++    const upkeep = createUpkeepState();
++    const resources = createResourceState();
++    resources.carried.egg = 100;
++    const workers = createWorkerState();
++    workers.assignments.egg = 2; // 2 assigned workers, village-wide upkeep (not tied to building)
++
++    const now = upkeep.lastCheckedAt + 10 * 60000; // 10 minutes later
++    const consumed = applyUpkeep(upkeep, resources, workers, now);
++    const expected = Math.floor(10 * 2 * EGG_UPKEEP_PER_WORKER_PER_MINUTE); // 10
++    assert.equal(consumed, expected);
++    assert.equal(resources.carried.egg, 100 - expected);
++  });
++
++  test('applyUpkeep clamps at 0 egg rather than going negative', () => {
++    const upkeep = createUpkeepState();
++    const resources = createResourceState();
++    resources.carried.egg = 3;
++    const workers = createWorkerState();
++    workers.assignments.egg = 10;
++
++    const now = upkeep.lastCheckedAt + 60 * 60000; // 1 hour — would consume way more than 3
++    const consumed = applyUpkeep(upkeep, resources, workers, now);
++    assert.equal(resources.carried.egg, 0);
++    assert.equal(consumed, 3);
++  });
++
++  test('applyUpkeep preserves sub-egg fractional remainder instead of losing it', () => {
++    const upkeep = createUpkeepState();
++    const resources = createResourceState();
++    resources.carried.egg = 1000;
++    const workers = createWorkerState();
++    workers.assignments.egg = 1; // 0.5 egg/min => 1 egg every 2 minutes exactly
++
++    // 90 seconds: 0.75 eggs accrued, floors to 0 consumed — checkpoint must not fully reset.
++    const now1 = upkeep.lastCheckedAt + 90000;
++    const consumed1 = applyUpkeep(upkeep, resources, workers, now1);
++    assert.equal(consumed1, 0);
++
++    // An additional 30 seconds should push the total elapsed (2 min) to exactly 1 egg,
++    // proving the earlier 90s of "in-between" time wasn't discarded.
++    const now2 = now1 + 30000;
++    const consumed2 = applyUpkeep(upkeep, resources, workers, now2);
++    assert.equal(consumed2, 1);
++  });
++});
+diff --git a/test/workers.test.js b/test/workers.test.js
+new file mode 100644
+index 0000000..effc7ac
+--- /dev/null
++++ b/test/workers.test.js
+@@ -0,0 +1,134 @@
++import { test, describe } from 'node:test';
++import assert from 'node:assert/strict';
++import {
++  createWorkerState,
++  getTotalPopulation,
++  getTotalAssigned,
++  getIdleWorkers,
++  assignWorker,
++  unassignWorker,
++  clampAssignmentsToCaps
++} from '../js/workers.js';
++import { createResourceState, RESOURCE_IDS } from '../js/resources.js';
++import { createBuildingUnlockState } from '../js/buildingUnlocks.js';
++import { createBuildingLevelState, getMaxWorkers, getRateMultiplier, getCapMultiplier } from '../js/buildingLevels.js';
++
++describe('workers.js', () => {
++  test('createWorkerState initializes every resource id assignment to 0', () => {
++    const state = createWorkerState();
++    for (const id of RESOURCE_IDS) assert.equal(state.assignments[id], 0);
++  });
++
++  test('getTotalPopulation only counts unlocked houses, at their current capacity', () => {
++    const unlocks = createBuildingUnlockState(); // house_1 unlocked by default
++    const levels = createBuildingLevelState();
++    assert.equal(getTotalPopulation(unlocks, levels), 3); // base house capacity
++
++    unlocks.house_2 = true;
++    assert.equal(getTotalPopulation(unlocks, levels), 6);
++
++    levels.house_2 = 2; // capacity now 6 for house_2 alone
++    assert.equal(getTotalPopulation(unlocks, levels), 3 + 6);
++  });
++
++  test('getTotalAssigned sums assignments across all resources', () => {
++    const state = createWorkerState();
++    state.assignments.egg = 2;
++    state.assignments.wood = 1;
++    assert.equal(getTotalAssigned(state), 3);
++  });
++
++  test('getIdleWorkers = population - assigned', () => {
++    const unlocks = createBuildingUnlockState();
++    const levels = createBuildingLevelState();
++    const workers = createWorkerState();
++    workers.assignments.egg = 1;
++    assert.equal(getIdleWorkers(workers, unlocks, levels), getTotalPopulation(unlocks, levels) - 1);
++  });
++
++  test('assignWorker fails when no idle workers are available', () => {
++    const unlocks = createBuildingUnlockState(); // population = 3 (house_1 base)
++    const levels = createBuildingLevelState();
++    const workers = createWorkerState();
++    const resources = createResourceState();
++    const maxWorkers = getMaxWorkers('old_coop', levels);
++    const rate = getRateMultiplier('old_coop', levels);
++    const cap = getCapMultiplier('old_coop', levels);
++
++    // Assign up to population limit (3), 4th should fail on population, not building cap.
++    for (let i = 0; i < 3; i++) {
++      assert.equal(assignWorker(workers, resources, 'egg', Date.now(), maxWorkers, rate, cap, unlocks, levels), true);
++    }
++    assert.equal(getIdleWorkers(workers, unlocks, levels), 0);
++    assert.equal(assignWorker(workers, resources, 'egg', Date.now(), maxWorkers, rate, cap, unlocks, levels), false);
++  });
++
++  test('assignWorker fails when the building\'s own max worker slots are already full', () => {
++    const unlocks = createBuildingUnlockState();
++    unlocks.house_2 = true;
++    unlocks.house_3 = true;
++    unlocks.house_4 = true;
++    unlocks.house_5 = true; // plenty of population headroom
++    const levels = createBuildingLevelState();
++    const workers = createWorkerState();
++    const resources = createResourceState();
++    const maxWorkers = getMaxWorkers('old_coop', levels); // 3 at level 1
++    const rate = getRateMultiplier('old_coop', levels);
++    const cap = getCapMultiplier('old_coop', levels);
++
++    for (let i = 0; i < maxWorkers; i++) {
++      assert.equal(assignWorker(workers, resources, 'egg', Date.now(), maxWorkers, rate, cap, unlocks, levels), true);
++    }
++    assert.equal(assignWorker(workers, resources, 'egg', Date.now(), maxWorkers, rate, cap, unlocks, levels), false);
++    assert.equal(workers.assignments.egg, maxWorkers);
++  });
++
++  test('assignWorker flushes accrued production at the OLD count before incrementing', () => {
++    const unlocks = createBuildingUnlockState();
++    const levels = createBuildingLevelState();
++    const workers = createWorkerState();
++    const resources = createResourceState();
++    const now = Date.now();
++    // No workers assigned yet; simulate the building having been idle
++    resources.buildingLastCollectedAt.egg = now - 999999;
++
++    assignWorker(workers, resources, 'egg', now, getMaxWorkers('old_coop', levels), 1, 1, unlocks, levels);
++    // Idle time before the FIRST worker must not backfill any production.
++    assert.equal(resources.carried.egg, 0);
++    assert.equal(resources.buildingLastCollectedAt.egg, now);
++  });
++
++  test('unassignWorker fails at 0 and does not go negative', () => {
++    const workers = createWorkerState();
++    const resources = createResourceState();
++    assert.equal(unassignWorker(workers, resources, 'egg', Date.now(), 1, 1), false);
++    assert.equal(workers.assignments.egg, 0);
++  });
++
++  test('unassignWorker flushes accrued production and decrements', () => {
++    const workers = createWorkerState();
++    const resources = createResourceState();
++    const now = Date.now();
++    workers.assignments.egg = 2;
++    resources.buildingLastCollectedAt.egg = now - 10000;
++
++    const result = unassignWorker(workers, resources, 'egg', now, 1, 1);
++    assert.equal(result, true);
++    assert.equal(workers.assignments.egg, 1);
++    assert.ok(resources.carried.egg > 0, 'should have flushed some production before unassigning');
++  });
++
++  test('clampAssignmentsToCaps clamps down over-cap assignments (legacy save migration case)', () => {
++    const workers = createWorkerState();
++    workers.assignments.egg = 20; // simulate an old save with a flat higher cap
++    clampAssignmentsToCaps(workers, () => 5);
++    assert.equal(workers.assignments.egg, 5);
++  });
++
++  test('clampAssignmentsToCaps leaves in-range assignments untouched', () => {
++    const workers = createWorkerState();
++    workers.assignments.egg = 3;
++    clampAssignmentsToCaps(workers, () => 5);
++    assert.equal(workers.assignments.egg, 3);
++  });
++});
+-- 
+2.43.0
+

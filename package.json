@@ -1,0 +1,14 @@
+{
+  "name": "chicken-saga-village",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chicken Village — a free, fan-made village builder web game for the Chicken Saga brand. Vanilla JS + HTML5 Canvas, no build step, no backend.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/",
+    "serve": "npx --yes http-server -c-1 -p 8080"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-15_
+_Last updated: 2026-07-17_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,87 +10,131 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Repo was confirmed in sync with the codebase last session (full diff,
-zero differences). This session was a bug-fix + rebalance pass on top
-of that — not yet re-verified against the repo, since the fixed code
-hasn't been uploaded yet. **Upload the latest zip before starting any
-new session.**
+Codebase had zero automated tests and a one-line README before this
+session (Documentation & Testing pass, 2026-07-17). Both are now in
+place: a 124-test suite covering every pure-logic module, plus a real
+README and developer architecture doc. One real (minor) bug was found
+via testing and fixed — see below. Prior sessions' claims (map layout
+zero-overlap, upgrade-cost purity, camera resize fix, etc.) are now
+backed by persistent regression tests instead of one-off notes/temp
+scripts that got deleted after use.
 
 ## Active Tasks
-1. ~~Upload this session's fixes to the repo~~ — **stale, corrected
-   2026-07-16**: verified directly against the cloned repo (not
-   assumed) that all of the Lucky Wheel/crafting-panel/house-capacity/
-   map-layout/unlock-button fixes described below ARE present in the
-   repo (commits `cb9208a`/`43897f0` and earlier). This note in
-   memory.md was out of date with reality.
-2. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
+1. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
    root-caused and fixed via code reasoning, not visual testing —
-   worth confirming they look right in an actual browser).
-3. Archive this session's changes into `openspec/` (no proposal was
-   drafted for this batch — it was a rapid bug-fix pass in response
-   to direct playtesting feedback, not a planned feature. Worth a
-   short retroactive change note at minimum.)
+   worth confirming they look right in an actual browser). Still open
+   — nothing in this session touched the Lucky Wheel visuals, and
+   `main.js`/`render.js` are explicitly NOT covered by the new
+   automated test suite (DOM/Canvas glue — see Testing section below).
+2. Archive prior sessions' changes into `openspec/` (no proposal was
+   drafted for the Lucky Wheel/crafting/layout bug-fix batch — still
+   outstanding, not addressed this session).
+3. Decide egg-upkeep consequences (still a no-op at 0 egg) — unchanged.
+4. Real art integration (still 100% placeholder) — unchanged.
+5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+   just sit in inventory) — unchanged.
 
-## Completed (chronological, high-level)
-See prior entries for the full build history (village MVP → resource
-economy → quest board/Lucky Wheel/crafting → industrial resources).
-This session added:
+## Testing Infrastructure (New, 2026-07-17)
+**Added a real, persistent automated test suite** — `test/`, using
+Node's built-in `node:test` runner (Node 20+, zero npm dependencies).
+124 tests across 14 suites, one file per pure-logic module:
+`resources`, `buildingLevels`, `buildingUnlocks`, `townHall`,
+`workers`, `upkeep`, `crafting`, `questBoard`, `camera`,
+`interactions`, `interactionHandlers`, `luckyWheel`, `gameState`,
+`map`. Run via `npm test` or `node --test`.
 
-1. **Root-caused and fixed two real Lucky Wheel bugs**, not just
-   symptom patches:
-   - Segment dividers were invisible — a previous fix tried thin
-     (1.5°) divider bands baked into the conic-gradient, which
-     apparently render inconsistently (likely anti-aliased away).
-     Replaced with actual DOM line elements, one per segment
-     boundary, which don't have that failure mode.
-   - Reward mismatch ("I see egg, but it says I won something else")
-     — the actual bug was a coordinate-math error in label placement:
-     `translate(radius, -12px)` positions a point near 3-o'clock
-     *before* rotation, not 12-o'clock, so every label was rotated
-     into roughly the wrong wedge relative to the color segment
-     underneath it. The wheel's landing animation was always correct;
-     only the visible label was wrong. Fixed the translate axes.
-2. **Found and fixed a real layout bug behind "crafting doesn't
-   work"**: the crafting panel and the "Press E to interact" prompt
-   were positioned at identical screen coordinates, directly
-   overlapping. Not a logic bug — verified crafting's underlying
-   functions were correct via simulation both before and after.
-3. **Upgrade costs redesigned**: now require every resource type
-   currently unlocked at the player's Town Hall level (not a gradual
-   "one more every 5 levels" rotation, which could mean a level-40
-   building still ignored resources unlocked ages ago).
-4. **House capacity increased 50%** (max 10→15/house, new formula
-   3/6/9/12/15 across 5 levels) to keep pace with the resource-
-   building count going from 4→6 after Quarry/Mine were added.
-5. **Map layout tightened and reorganized**: resource cluster packed
-   into a denser 3×2 grid, Workbench moved next to Town Hall, houses
-   moved from a separate far corner to cluster right next to Town
-   Hall too. Collision-verified, zero overlaps.
-6. **Unlocking is now a deliberate button-click, not auto-on-E** —
-   matching the same pattern already used for upgrades. A persistent
-   panel now shows unlock requirements (Town Hall level + cost, with
-   insufficient resources shown in red) whenever standing near any
-   locked building/house, with a dedicated Unlock button. E-press on
-   a locked building now shows info only.
+- `test/helpers/localStorage-mock.js`: minimal in-memory
+  `localStorage` polyfill installed on `globalThis`, imported before
+  `gameState.js` in `gameState.test.js` — lets save/load/migration
+  logic run under plain Node with no browser/jsdom.
+- Several tests are explicit regression guards for bugs previously
+  found and fixed in past sessions (documented inline): the
+  flush-before-assign "no backfill production" rule in
+  resources.js/workers.js, upgrade-cost purity (unaffected by
+  unrelated buildings/Town Hall state) in buildingLevels.js, the
+  camera viewport-resize clamp bug, and the edge-distance-not-center
+  interaction-range calculation in interactions.js.
+- `test/map.test.js` replaces the "manually re-derive every
+  interactable's rectangle and confirm no overlaps" pattern several
+  past sessions did by hand each time with a real automated check
+  that runs on every `npm test`.
+- **Explicitly NOT covered**: `main.js`, `render.js`, `sprites.js`,
+  `spriteRenderer.js` — DOM/Canvas glue and visual output. These need
+  browser playtesting, not unit tests; noted in README.md and
+  docs/ARCHITECTURE.md so this isn't mistaken for an oversight later.
+- **Not yet done, worth a future session**: no CI workflow file
+  (e.g. GitHub Actions) exists to run `npm test` automatically on
+  push/PR — currently the suite only runs when someone remembers to
+  invoke it locally. Would meaningfully improve release readiness.
+
+## Bug Found & Fixed via Testing: Stray `grain` Key Never Deleted After Rename Migration (2026-07-17)
+**Found by:** writing `test/gameState.test.js`'s grain→rice migration
+test and checking the *shape* of the migrated result, not just the
+renamed value.
+
+**Root cause:** `migrateOldResourceShape()` in `gameState.js` builds
+the new `carried`/`totalCollected`/`buildingLastCollectedAt` objects
+via `{ ...fresh, ...(rawResources.X || {}) }` — an object spread that
+copies every key from the old save verbatim, including the legacy
+`grain` key. The code below that correctly copies `grain`'s value
+into the new `rice` key, but never removed the original `grain` key
+from the spread result, so every migrated save carried a dead `grain`
+entry forward alongside the new `rice` entry, forever (each subsequent
+autosave just re-persists it).
+
+**Impact:** Low severity in practice — confirmed via grep that
+`main.js` always iterates resources via `RESOURCE_IDS`/explicit ids,
+never `Object.keys(resources.carried)`, so the stray key was never
+displayed or otherwise acted on. It was pure save-data bloat, but
+real: a "new shape" that was supposed to have no `grain` key at all
+(per the code's own comment) actually did.
+
+**Fix:** Added `delete merged.carried.grain` (and the same for
+`totalCollected`/`buildingLastCollectedAt`) immediately after copying
+each value over to `rice`. Three-line change in `js/gameState.js`.
+
+**Verification:** `node --check js/gameState.js` (syntax OK). Full
+test suite: 124/124 passing after the fix (was 123/124 before, with
+the one failure being this exact bug). Also reran `node --check` on
+all 17 `js/*.js` files — all pass.
+
+## Documentation Added (2026-07-17)
+- **`README.md`**: was a single line (`# chicken-saga-village`) before
+  this session. Now covers: fan-project disclaimer, controls, how to
+  run locally (static file server required — ES module imports don't
+  work from `file://`), full project structure with a one-line
+  description of every `js/` file, save-data/migration overview,
+  testing instructions, and contribution/workflow notes (openspec
+  conventions, memory.md as the handoff log).
+- **`docs/ARCHITECTURE.md`** (new): deeper developer-facing doc —
+  pure-logic-vs-presentation-glue module split (and why that split
+  matters for testability), full game state shape reference, the
+  game loop's per-frame order of operations in `main.js`, a
+  named-and-explained write-up of the "offline-safe timestamp
+  checkpoint" pattern used by resource production/upkeep/Lucky Wheel
+  tickets (previously only explained piecemeal in scattered code
+  comments), the full save-migration chain in one place, and a
+  "where to look for what" task→file lookup table.
 
 ## Next Recommended Task
-Same candidates as last session, still valid (none of this session's
-work was new-feature work, it was fixes + rebalance):
-1. Upload this session's fixes to the repo (blocking — see Active Tasks)
-2. Playtest for balance, especially: Lucky Wheel visuals, the new
-   "all TH-unlocked resources" upgrade cost (may be steeper than
-   intended now — worth checking it doesn't make early upgrades feel
-   punishing), house capacity pacing
-3. Decide egg-upkeep consequences (still a no-op at 0 egg)
-4. Real art integration (still 100% placeholder)
-5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+1. Real in-browser playtest of: Lucky Wheel visuals, camera resize
+   behavior, upgrade panel red-highlighting/layout — all previously
+   verified only via code reasoning/simulation, never an actual
+   browser (per Active Task #1, carried over from prior sessions).
+2. Add a CI workflow (e.g. `.github/workflows/test.yml`) to run
+   `npm test` automatically on push/PR — the test suite exists now
+   but nothing enforces it gets run.
+3. Archive the Lucky Wheel/crafting/layout bug-fix batch into
+   `openspec/` (carried over, still not done).
+4. Decide egg-upkeep consequences (still a no-op at 0 egg)
+5. Real art integration (still 100% placeholder)
+6. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
    just sit in inventory)
-6. Hero/dungeon system (non-NFT version) — still just discussed, not
+7. Hero/dungeon system (non-NFT version) — still just discussed, not
    proposed
 
 ## Decisions
-(Carried over from prior session, still all in force — no changes
-this session.)
+(Carried over from prior sessions, still all in force.)
 - NFT/land ownership/revenue-share/monetization stays deferred
   pending legal review, full stop.
 - Kenney.nl (CC0) is the recommended path for real art, not yet
@@ -98,21 +142,29 @@ this session.)
 - Resource role split: Egg = worker upkeep. Feathers = reserved for
   future hero system. Rice/Wood/Stone/Ore = industrial raw→refined
   lane.
-- Workflow: developer uploads via GitHub web UI, not git CLI.
+- Workflow: developer uploads via GitHub web UI, not git CLI (per
+  prior sessions' notes — this session committed directly via git CLI
+  since it was working from a fresh clone, not a delivered zip; worth
+  confirming with the developer which workflow is actually in use
+  going forward).
 - Verification standard: every change gets a per-file syntax check,
   a full import-graph trace, and functional simulation tests before
-  being called done — this session is a direct example of why: two
-  real bugs (wheel label math, panel overlap) were found by reasoning
-  through the actual code/CSS, not by assuming a prior fix worked.
+  being called done — this session upgrades that standard further:
+  those "functional simulation" checks should now be written as
+  persistent tests in `test/` rather than temp scripts deleted after
+  use, so the verification isn't lost/re-derived from scratch next
+  session.
 
 ## New Decision This Session
-- **When a bug report says a previous fix "still" isn't working,
-  re-derive the fix from scratch rather than re-applying the same
-  patch.** Both wheel bugs this session were previously "fixed" in
-  an earlier session but the fixes were incomplete/wrong in ways that
-  weren't caught without a real browser to test in. Default to
-  suspecting the earlier fix's own correctness, not just staleness of
-  the build the developer is testing.
+- **Persistent automated tests, not throwaway verification
+  scripts.** Multiple past sessions' "Verification performed" notes
+  describe writing a temp Node script, running it, then deleting it.
+  That worked for one-time confidence but meant the same
+  verification had to be re-derived by hand in later sessions (e.g.
+  "map layout has zero overlaps" was manually re-checked at least
+  twice). Going forward: functional/behavioral verification for
+  `js/*.js` logic changes should become a real `test/*.test.js` file
+  using the existing `node --test` suite, not a deleted script.
 
 ## Backend Engineer Check-In (2026-07-16)
 Reviewed repo/memory to look for backend work. Confirmed: project is
@@ -327,3 +379,31 @@ pre-launch checklist exists.
   updated, and functional simulation across every building/level
   confirmed the highlighting logic still works against the new cost
   shape. No code changes made. Files touched: `memory.md` only.
+- **2026-07-17 (Documentation & Testing)**: First dedicated docs/test
+  session. Built a real, persistent test suite (`test/`, Node's
+  built-in `node:test`, zero dependencies) covering all 14 pure-logic
+  modules — 124 tests, several written as explicit regression guards
+  for bugs documented earlier in this file (backfill-on-assign,
+  upgrade-cost purity, camera resize clamp, edge-vs-center interaction
+  distance). Added `test/helpers/localStorage-mock.js` so
+  `gameState.js` save/load/migration logic is testable under plain
+  Node. Running the new suite caught one real (low-severity) bug:
+  `migrateOldResourceShape()` in `gameState.js` never deleted the old
+  `grain` key after copying its value to `rice`, so every migrated
+  save carried a dead `grain` entry forward indefinitely — fixed with
+  a 3-line change (`delete` after each copy), verified via
+  `node --check` + full suite (124/124 passing, was 123/124).
+  Rewrote `README.md` from a one-line placeholder into a full project
+  overview (controls, local-serving instructions, project structure,
+  save/migration notes, testing instructions, contribution notes).
+  Added `docs/ARCHITECTURE.md`: pure-logic-vs-glue module split, full
+  game state shape reference, per-frame game loop order, a named
+  write-up of the "offline-safe timestamp checkpoint" pattern used
+  across resources/upkeep/Lucky Wheel, the complete save-migration
+  chain, and a task→file lookup table. Explicitly documented that
+  `main.js`/`render.js`/`sprites.js`/`spriteRenderer.js` are NOT
+  covered by automated tests (DOM/Canvas glue, needs browser
+  playtesting) so this isn't mistaken for a gap later. Files
+  modified/added: `js/gameState.js` (bug fix), `README.md` (rewrite),
+  `docs/ARCHITECTURE.md` (new), `package.json` (new), `test/*` (new,
+  15 files), `memory.md`.

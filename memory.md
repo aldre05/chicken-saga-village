@@ -219,7 +219,93 @@ repo inspection this session confirmed they're all present.
 playtest of the upgrade panel (visual confirmation of red highlighting
 and layout, not just logic) is still open per Active Task #2 above.
 
+## Code Review: Full Pass (2026-07-16)
+**Scope:** First dedicated code-review pass over the whole repo (all
+`js/*.js`), not tied to a specific feature ticket. Read every file,
+cross-checked the map layout/collision claims already in this file by
+simulation rather than trusting the prior note, and looked for bugs,
+security, performance, readability, duplication, and architecture
+issues.
+
+**Bug found and fixed — stale camera viewport on window resize
+(`js/main.js`):** `camera` was created once via `createCamera(...,
+canvas.width, canvas.height)` at load time. The `window.resize`
+listener called `resizeCanvas()`, which updated the `<canvas>`
+element's own `width`/`height`, but never touched
+`camera.viewportWidth`/`viewportHeight` — those are the values
+`camera.follow()` actually clamps panning against. Net effect: after
+a player resized their browser window, the camera kept clamping to
+the *original* viewport size, which could let the view pan past the
+map edge (into undrawn space) or stop correctly hugging the player
+near boundaries, depending on which direction the window resized.
+Fixed by moving camera creation before the resize listener and having
+the listener update `camera.viewportWidth`/`viewportHeight` after
+every resize. (First attempt referenced `camera` from inside
+`resizeCanvas()` itself before its `const` declaration — caught before
+committing, since that throws a temporal-dead-zone `ReferenceError`
+on the very first call. Restructured so `resizeCanvas()` stays
+canvas-only and a separate resize listener updates both canvas and
+camera, in the correct declaration order.) Verified: `node --check`
+on `js/main.js`, plus a standalone simulation of `camera.follow()`
+against a shrunk viewport confirming it now clamps to the new
+(smaller) bounds instead of the stale original ones.
+
+**Verified, not changed — map layout has zero overlaps:** re-derived
+every interactable's pixel rectangle from `map.js` independently
+(not trusting the existing memory.md claim) and confirmed
+programmatically: no building-vs-building overlaps, no building
+sits on the pond, no building sits on the border tree ring. The
+"tightened, zero overlaps" claim in the Completed section above
+holds up under direct recomputation.
+
+**Reviewed with no issues found:** `resources.js`, `buildingLevels.js`,
+`buildingUnlocks.js`, `workers.js`, `upkeep.js`, `crafting.js`,
+`questBoard.js`, `townHall.js`, `gameState.js` (including its
+multi-generation save-migration logic), `interactionHandlers.js`,
+`interactions.js`, `player.js`, `render.js`. Upkeep's fractional-time
+checkpointing, the resource production offline-safe timestamp
+pattern, and the save-migration chain (old flat egg fields → dict
+shape → grain/rice rename → per-building houses → assignment-cap
+clamping) are all internally consistent and correctly ordered.
+
+**Flagged, not changed — needs a product/deploy decision:**
+`js/luckyWheel.js` still has `TICKET_INTERVAL_MS` set to 1 minute
+with an explicit comment marking it as a testing value that should
+become 1 hour (`60*60*1000`) "before this goes anywhere near real
+players." This is a deliberate, self-documented placeholder rather
+than a bug, so left as-is rather than silently changing game balance
+— but it's a real pre-launch blocker worth a checklist item so it
+doesn't get shipped by accident.
+
+**All 17 `js/*.js` files pass `node --check` (fresh full-repo sweep,
+not just the files touched this session).**
+
+**Next recommended task:** No other code changes queued from this
+pass. Recommend the developer playtest the resize fix specifically
+(resize the browser window mid-session, then walk toward each map
+edge) since it's a real behavioral change, if a small one. The
+`TICKET_INTERVAL_MS` testing value above should go on whatever
+pre-launch checklist exists.
+
 ## Session Log
+- **This session (Code Reviewer)**: Full-repo review pass, not scoped
+  to one feature. Found and fixed one real bug: the camera's
+  viewport dimensions went stale on browser window resize because
+  the resize handler only resized the `<canvas>` element, never
+  `camera.viewportWidth`/`viewportHeight` (which `camera.follow()`
+  clamps against) — could let the view pan past the map edge after a
+  resize. Fixed in `js/main.js` (also caught and corrected a
+  temporal-dead-zone bug in my own first attempt before committing
+  it). Independently re-verified the "map layout has zero overlaps"
+  claim from a prior session by recomputing all interactable
+  rectangles from scratch rather than trusting the existing note —
+  confirmed true. Reviewed all other `js/*.js` files with no further
+  issues found. Flagged (not changed, needs a product call) that
+  `luckyWheel.js`'s `TICKET_INTERVAL_MS` is still an explicit
+  1-minute testing value that needs to become 1 hour before launch.
+  Verification: `node --check` on all 17 `js/*.js` files, plus a
+  standalone functional simulation of the camera fix. Files modified:
+  `js/main.js`, `memory.md`.
 - **This session**: Fixed 9 items from direct playtesting feedback:
   2 real Lucky Wheel bugs (dividers, reward-label mismatch — both
   root-caused via careful geometry/CSS reasoning, not guessed at),

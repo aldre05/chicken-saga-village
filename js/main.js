@@ -179,7 +179,7 @@ upgradeBtn.addEventListener('click', () => {
     ok = canUpgradeTownHall(gameState.townHall, gameState.resources) && upgradeTownHall(gameState.townHall, gameState.resources);
     resultText = `Upgraded! Lv.${gameState.townHall.level} ⬆️`;
   } else {
-    ok = upgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
+    ok = upgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
     resultText = `Upgraded! Lv.${gameState.buildingLevels[buildingId]} ⬆️`;
   }
 
@@ -605,9 +605,9 @@ function updateBuildingPanel(nearest) {
       upgradeBtn.disabled = true;
       upgradePreviewEl.textContent = 'Max capacity reached';
     } else {
-      const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels, gameState.townHall.level);
+      const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels);
       const nextCapacity = getHouseCapacity(buildingId, { ...gameState.buildingLevels, [buildingId]: level + 1 });
-      upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
+      upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
       upgradePreviewEl.innerHTML = `${formatCostHTML(upgradeCost)} → ${nextCapacity} workers`;
     }
   } else {
@@ -632,9 +632,9 @@ function updateBuildingPanel(nearest) {
     workerMinusBtn.disabled = assigned <= 0;
     workerPlusBtn.disabled = assigned >= maxWorkers || idleWorkers <= 0;
 
-    const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels, gameState.townHall.level);
+    const upgradeCost = getUpgradeCost(buildingId, gameState.buildingLevels);
     const nextLevelRate = getEffectiveRatePerSecond(resourceId, assigned, rateMultiplierForLevel(level + 1)) * 60;
-    upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources, gameState.townHall.level);
+    upgradeBtn.disabled = !canUpgradeBuilding(buildingId, gameState.buildingLevels, gameState.resources);
     upgradePreviewEl.innerHTML = assigned > 0
       ? `${formatCostHTML(upgradeCost)} → ${Math.round(nextLevelRate)}/min`
       : `${formatCostHTML(upgradeCost)} → Lv.${level + 1}`;

@@ -407,3 +407,26 @@ pre-launch checklist exists.
   modified/added: `js/gameState.js` (bug fix), `README.md` (rewrite),
   `docs/ARCHITECTURE.md` (new), `package.json` (new), `test/*` (new,
   15 files), `memory.md`.
+- **2026-07-18 (CI)**: Added `.github/workflows/test.yml` — runs
+  `npm test` on every push/PR via `actions/checkout@v4` +
+  `actions/setup-node@v4` (Node 20), no install step (zero deps).
+  File matches spec exactly. **Flagged risk, not fixed (out of
+  scope for this task):** in this sandbox, `npm test` (which runs
+  `node --test test/`) fails with `Cannot find module '.../test'` —
+  Node 22.22.2 here appears to mis-handle an explicit directory
+  argument to `--test`, treating it as the entry script instead of a
+  discovery path. Reproduced in a throwaway unrelated directory too,
+  so it's a Node-build quirk, not project-specific. Bare
+  `node --test` (no arg) correctly auto-discovers and passes
+  124/124. Could not verify whether Node 20 (what the new CI workflow
+  pins via setup-node) has the same issue — no way to install Node 20
+  locally in this sandbox to test. **If the first Actions run fails
+  with a similar error, the fix is a 1-line `package.json` change:**
+  `"test": "node --test"` (drop the trailing `test/`, since the test
+  runner already auto-discovers `test/**/*.test.js` by default).
+  Deliberately did not make that change pre-emptively since it could
+  not be confirmed as necessary. Files modified:
+  `.github/workflows/test.yml` (new), `memory.md`.
+  **Next backend task:** none queued — recommend developer watch the
+  first Actions run after pushing and apply the `package.json` fix
+  above only if it fails with the `Cannot find module` error.

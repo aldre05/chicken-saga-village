@@ -17,13 +17,21 @@
   radius, and dialogue text (map.js).
 - Only the tiles within the current camera viewport are drawn each
   frame (render.js `drawVisibleTiles`), not the whole map.
-- 13 buildings currently placed, clustered by type: 6 resource
-  buildings (Old Coop, Nest Bundle, Woodshed, Rice Paddy, Quarry,
-  Mine) in one area, 5 houses in another, Town Hall + Workbench +
-  Farmer Joe placed centrally. Every placement is collision-verified
-  programmatically (no overlaps, nothing on solid tiles) before
-  shipping — this check has caught real placement bugs multiple
-  times and should keep being run for any new building.
+- 13 buildings currently placed. **Layout v2 (tightened per
+  playtesting feedback):** 6 resource buildings (Old Coop, Nest
+  Bundle, Woodshed, Rice Paddy, Quarry, Mine) packed into a compact
+  3×2 grid in the top-right; Town Hall, Workbench, Farmer Joe, and
+  all 5 houses clustered together centrally around Town Hall. This
+  replaced an earlier layout where houses sat in a separate far
+  corner and the Workbench was off inside the resource cluster —
+  moved because gameplay revolves around Town Hall (upgrading it,
+  checking popularity) and around houses (worker population), so
+  both belong near where the player naturally spends time, not
+  scattered by building "type." Every placement is
+  collision-verified programmatically (no overlaps, nothing on solid
+  tiles) before shipping — this check has caught real placement bugs
+  multiple times, is now enforced automatically by `test/map.test.js`
+  on every test run, and should keep being run for any new building.
 - **Exception**: the Lucky Wheel is NOT on the map — it's a fixed
   screen UI widget, not a walkable interactable (see lucky-wheel
   spec). Building-level labels (e.g. "Old Coop (Lvl 3)") are drawn

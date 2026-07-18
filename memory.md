@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-17_
+_Last updated: 2026-07-18_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,14 +10,14 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Codebase had zero automated tests and a one-line README before this
-session (Documentation & Testing pass, 2026-07-17). Both are now in
-place: a 124-test suite covering every pure-logic module, plus a real
-README and developer architecture doc. One real (minor) bug was found
-via testing and fixed — see below. Prior sessions' claims (map layout
-zero-overlap, upgrade-cost purity, camera resize fix, etc.) are now
-backed by persistent regression tests instead of one-off notes/temp
-scripts that got deleted after use.
+Test suite (124 tests), README, architecture doc, and CI workflow are
+all in place as of the 2026-07-17/18 sessions. This session archived
+the previously-unrecorded Lucky Wheel/crafting/layout/unlock-button
+bug-fix batch (shipped 2026-07-16, never got an OpenSpec proposal)
+into `openspec/specs/` — `building-progression`, `lucky-wheel`, and
+`world-map` specs now describe the actual current, fixed behavior
+with root causes noted, not the earlier buggy versions. No code
+changes this session (docs-only).
 
 ## Active Tasks
 1. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
@@ -26,9 +26,8 @@ scripts that got deleted after use.
    — nothing in this session touched the Lucky Wheel visuals, and
    `main.js`/`render.js` are explicitly NOT covered by the new
    automated test suite (DOM/Canvas glue — see Testing section below).
-2. Archive prior sessions' changes into `openspec/` (no proposal was
-   drafted for the Lucky Wheel/crafting/layout bug-fix batch — still
-   outstanding, not addressed this session).
+2. ~~Archive prior sessions' changes into `openspec/`~~ — **done this
+   session**, see "OpenSpec Archival" below.
 3. Decide egg-upkeep consequences (still a no-op at 0 egg) — unchanged.
 4. Real art integration (still 100% placeholder) — unchanged.
 5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
@@ -339,6 +338,85 @@ edge) since it's a real behavioral change, if a small one. The
 `TICKET_INTERVAL_MS` testing value above should go on whatever
 pre-launch checklist exists.
 
+## OpenSpec Archival: Lucky Wheel/Crafting/Layout Bug-Fix Batch (2026-07-18)
+The 2026-07-16 bug-fix batch (2 real Lucky Wheel bugs, 1 layout
+overlap bug, upgrade-cost redesign, house capacity increase, map
+reorg, unlock-button pattern) shipped reactively — in response to
+direct playtesting feedback — and never got an OpenSpec proposal.
+Per project convention, specs are the source of truth for current
+behavior, so an undocumented spec drift risked future sessions
+reasoning from stale/incorrect written descriptions instead of the
+actual code. Cross-checked every affected spec against the real,
+current `js/` source (not against memory.md's own prior claims) before
+writing anything, per this project's established "verify, don't
+trust the notes" habit.
+
+**`openspec/specs/building-progression/spec.md`:**
+- Unlocking section rewritten: was still describing the old "walk up,
+  press E, pay cost" auto-unlock flow; now describes the actual
+  current deliberate-button + persistent-requirements-panel pattern
+  (confirmed against `main.js`'s `updateBuildingPanel()` locked-state
+  branch and `interactionHandlers.js`'s locked-building dialogue).
+- House capacity numbers corrected: spec still said the old +2/level,
+  base 2, cap 10, 50-population-total figures; actual code
+  (`buildingLevels.js`) is +3/level, base 3, cap 15, 75-population-
+  total (the increase from the 2026-07-16 session).
+- Upgrade-cost section: the deterministic-rotation formula description
+  was *already accurate* (this project's habit of writing the "why,"
+  not just the "what," meant no misleading text needed correcting
+  here) — added an explicit root-cause writeup of the TH-reactive bug
+  it replaced (per Ticket 1, `getUpgradeCost()` no longer takes a
+  `townHallLevel` argument), since the spec previously documented the
+  fixed formula without ever recording *why* it needed to be pure —
+  a gap that risked a future change accidentally reintroducing a
+  live-state dependency.
+- Added a "Constraints for future changes" bullet making the
+  purity requirement explicit and forward-looking, not just
+  historical.
+
+**`openspec/specs/lucky-wheel/spec.md`:**
+- Divider description was describing the *broken* version ("thin
+  divider lines... including the wrap-around seam — a bug caught and
+  fixed" implied gradient-band dividers were the fix; they were
+  actually the bug). Rewritten to describe the real fix (DOM line
+  elements) and why gradient bands failed (anti-aliasing).
+- Added the label-positioning bug (reward mismatch — labels landing
+  ~90° from their actual segment) with the geometric root cause
+  (`translate` Y-vs-X axis confusion relative to `rotate(0deg)`'s
+  reference direction), which the spec previously didn't mention at
+  all.
+- Added a forward-looking constraint against reintroducing either bug.
+
+**`openspec/specs/world-map/spec.md`:**
+- "Clustered by type" layout description (houses in one area,
+  resource buildings in another) was the *pre-reorg* layout. Rewritten
+  to describe the actual current v2 layout (resource cluster
+  top-right, Town Hall/Workbench/Farmer Joe/houses all clustered
+  centrally) with the why (gameplay revolves around Town Hall and
+  houses, so cluster near where the player spends time). Cross-checked
+  every coordinate directly against `map.js`'s `interactables` array,
+  not assumed from the prior session's prose description.
+- Noted that the zero-overlap layout check is now enforced
+  automatically by `test/map.test.js` on every test run, not just a
+  one-time manual verification.
+
+**Not done, deliberately out of scope for this task:** did not create
+a retroactive `openspec/changes/<name>/` proposal folder for this
+batch — the task only asked for `specs/` updates, and adding a
+changes/ folder wasn't requested. Worth a future call: this project's
+existing `changes/` folders (`add-village-mvp`, `add-resource-economy`,
+`add-industrial-resources`, `rework-building-progression`) are all
+planned-ahead-of-time proposals; a reactive bug-fix batch may not fit
+that template well, or may need a lighter-weight variant.
+
+**Verification:** No code changed this session — docs-only. Reran the
+full test suite (124/124 passing, unchanged) to confirm nothing was
+inadvertently touched. Cleaned up a stray
+`chicken-saga-village-doctest-session.patch` file that had been
+uploaded into the repo root alongside the 2026-07-17 session's actual
+deliverables — it was a delivery artifact (a git patch for manual
+application), not meant to live in the repo.
+
 ## Session Log
 - **This session (Code Reviewer)**: Full-repo review pass, not scoped
   to one feature. Found and fixed one real bug: the camera's
@@ -430,3 +508,34 @@ pre-launch checklist exists.
   **Next backend task:** none queued — recommend developer watch the
   first Actions run after pushing and apply the `package.json` fix
   above only if it fails with the `Cannot find module` error.
+- **2026-07-18 (Documentation & Testing — OpenSpec archival)**: Fresh
+  clone confirmed the 2026-07-17 test suite + docs and the CI workflow
+  are both live on `origin/main` (developer uploaded them, per the
+  prior session's zip). Archived the previously-undocumented
+  2026-07-16 Lucky Wheel/crafting/layout/unlock-button bug-fix batch
+  into `openspec/specs/` as requested — updated
+  `building-progression/spec.md` (unlock pattern rewritten to the
+  actual deliberate-button/requirements-panel flow, house capacity
+  numbers corrected from stale +2/base2/cap10 to actual +3/base3/
+  cap15, added root-cause writeup of the Town-Hall-reactive
+  upgrade-cost bug and a forward-looking purity constraint),
+  `lucky-wheel/spec.md` (divider/label sections were describing the
+  *broken* pre-fix versions — rewritten to the real DOM-line-divider
+  and Y-axis-translate-label fixes with root causes), and
+  `world-map/spec.md` (layout description updated from the old
+  "clustered by type" to the actual current "resource cluster +
+  central Town Hall/house cluster" v2 layout, cross-checked directly
+  against `map.js` coordinates). Every change was verified against
+  live source code (`js/buildingLevels.js`, `js/main.js`,
+  `js/luckyWheel.js`, `js/map.js`), not against prior sessions' prose
+  claims. Also removed a stray delivery artifact
+  (`chicken-saga-village-doctest-session.patch`) that had been
+  uploaded into the repo root by mistake — it wasn't meant to live
+  there. Docs-only session, no `js/` changes; reran the full suite to
+  confirm (124/124 passing, unchanged). Deliberately did not create a
+  retroactive `openspec/changes/` proposal folder — out of the
+  requested scope, flagged as a question for a future session. Files
+  modified: `openspec/specs/building-progression/spec.md`,
+  `openspec/specs/lucky-wheel/spec.md`,
+  `openspec/specs/world-map/spec.md`, `memory.md`. Files removed:
+  `chicken-saga-village-doctest-session.patch`.

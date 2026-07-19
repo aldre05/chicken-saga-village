@@ -146,6 +146,17 @@ all 17 `js/*.js` files — all pass.
   since it was working from a fresh clone, not a delivered zip; worth
   confirming with the developer which workflow is actually in use
   going forward).
+- **Team members must pull the current live repo before starting
+  work, not reuse an older local copy.** Found and fixed a real
+  instance of this: 4 already-archived `openspec/changes/` folders
+  (deleted in an earlier session) reappeared in a later upload,
+  because GitHub's drag-and-drop upload only adds/overwrites files —
+  it never deletes anything. Whoever generated that batch was working
+  from a stale pre-archive copy of the repo; their actual new work
+  was correct, the old folders just came along for the ride. Since
+  there's no git merge to catch this automatically with a manual-
+  upload workflow, this has to be a discipline each agent/session
+  applies deliberately: check the live repo state first.
 - Verification standard: every change gets a per-file syntax check,
   a full import-graph trace, and functional simulation tests before
   being called done — this session upgrades that standard further:

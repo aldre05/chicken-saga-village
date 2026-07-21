@@ -17,7 +17,7 @@
   radius, and dialogue text (map.js).
 - Only the tiles within the current camera viewport are drawn each
   frame (render.js `drawVisibleTiles`), not the whole map.
-- 13 buildings currently placed. **Layout v2 (tightened per
+- 15 buildings currently placed. **Layout v2 (tightened per
   playtesting feedback):** 6 resource buildings (Old Coop, Nest
   Bundle, Woodshed, Rice Paddy, Quarry, Mine) packed into a compact
   3×2 grid in the top-right; Town Hall, Workbench, Farmer Joe, and
@@ -32,6 +32,14 @@
   tiles) before shipping — this check has caught real placement bugs
   multiple times, is now enforced automatically by `test/map.test.js`
   on every test run, and should keep being run for any new building.
+- **Barracks and Dungeon Gate** (added with the hero/dungeon system —
+  see hero-system and dungeon-system specs) sit just below the Town
+  Hall/Workbench cluster, on open ground between Town Hall's footprint
+  and the map's bottom border, clear of the vertical path and House 5.
+  Placed there for the same "management cluster" reasoning as
+  Workbench: both are buildings the player revisits often rather than
+  a one-time resource stop, so they belong near where the player
+  already spends time.
 - **Exception**: the Lucky Wheel is NOT on the map — it's a fixed
   screen UI widget, not a walkable interactable (see lucky-wheel
   spec). Building-level labels (e.g. "Old Coop (Lvl 3)") are drawn

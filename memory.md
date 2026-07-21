@@ -10,71 +10,58 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`) is fully
-implemented and code-reviewed as of this session: Backend (1.1–1.5),
-Frontend (2.1–2.5), and Code Reviewer (3.1–3.5) tasks are all done.
-**Found and fixed a real bug during review** (see session log below):
-a hero could be re-sent on a new mission in the window right as its
-old mission's timer expired but before lazy resolution ran, silently
-discarding the original mission's reward — contradicted design.md's
-own stated intent. Fixed in `heroes.js`/`dungeons.js`, with a
-regression test that fails against the old code and passes against
-the fix (verified both directions). Only Documentation & Testing
-(4.1–4.5) remains: `test/heroes.test.js`/`test/dungeons.test.js` are
-now written as part of the Code Reviewer pass (task 3.x explicitly
-calls for persistent tests, so 4.1 is effectively also done — next
-session should confirm and check the box rather than write duplicate
-tests), but new specs, the `world-map` spec update, and archiving
-`openspec/changes/` are still open.
+Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`, now
+deleted per the archive step) is fully implemented, reviewed, and
+**now fully documented/tested as of this session** — all of Backend
+(1.1–1.5), Frontend (2.1–2.5), Code Reviewer (3.1–3.5), and
+Documentation & Testing (4.1–4.5) are done. This session: moved
+`heroes.test.js`/`dungeons.test.js` from `js/` (wrong location — they
+worked there by accident since Node's default test discovery isn't
+limited to `test/`, but violated this project's own convention) into
+`test/` where they belong; added hero-roster save/load coverage to
+`gameState.test.js` (wasn't covered at all); wrote
+`openspec/specs/hero-system/spec.md` and
+`openspec/specs/dungeon-system/spec.md` from the actual shipped code
+(not the original proposal — cross-checked against `heroes.js`/
+`dungeons.js`/`main.js` directly); updated `world-map` spec's building
+count and added Barracks/Dungeon Gate; updated `README.md`/
+`docs/ARCHITECTURE.md`'s module lists and lookup tables to include the
+2 new modules; deleted the merged `openspec/changes/add-heroes-dungeons/`
+folder per the standard archive step. 165/165 tests passing.
+**Also confirmed (not re-flagged)**: the stray
+`chicken-saga-village-doctest-session.patch` file that multiple prior
+sessions flagged as still-present is actually gone now — verified via
+a fresh clone this session, not assumed from the old notes.
 
 ## Active Tasks
-1. **Docs/Testing for Heroes + Dungeons** (tasks.md 4.1–4.5):
-   `test/heroes.test.js` + `test/dungeons.test.js` now exist (written
-   this session as part of Code Reviewer sign-off — confirm/check off
-   4.1 rather than rewriting), new specs
-   (`openspec/specs/hero-system/spec.md`,
-   `openspec/specs/dungeon-system/spec.md`), `world-map` spec update
-   for the 2 new buildings, archive `openspec/changes/` once specs
-   are written, memory.md wrap-up.
-2. **NEW — found this session, not fixed (out of scope, flagging for
-   triage):** `applyUpkeep()` is called from `main.js`'s `loop(now)`
-   using the `requestAnimationFrame` timestamp (time since page load)
-   as its `now` argument, but `upkeepState.lastCheckedAt` is
-   initialized with `Date.now()` (epoch ms) in `createUpkeepState()`.
-   Those are different clocks — `now - lastCheckedAt` is a huge
-   negative number on every call, so `applyUpkeep`'s early-return path
-   (`if (consumed <= 0) return 0;`) fires every time *without*
-   advancing `lastCheckedAt`, meaning egg upkeep likely never actually
-   consumes anything in practice. This is separate from the
-   already-tracked "no consequence at 0 egg" design gap (item 4 below)
-   — this is upkeep not firing *at all*, a functional bug not a
-   deferred design decision. Didn't fix it here: it's unrelated to the
-   Heroes/Dungeons ticket, and silently starting to consume egg
-   mid-unrelated-PR is a balance change that deserves its own
-   dedicated pass, not a drive-by fix. Whoever picks this up should
-   double check by adding a quick `test/upkeep.test.js` case that
-   drives `loop()`'s actual call pattern (or just fix the call site to
-   pass `Date.now()` instead of the rAF timestamp — likely the
-   simplest correct fix, but flagging rather than assuming).
-3. **Playtest Heroes + Dungeons in an actual browser** — this and the
-   prior session's verification was thorough (persistent tests +
-   jsdom smoke test) but is still not a human looking at it. In
-   particular: confirm the roster row's countdown display looks right
-   in the sub-frame window between a mission's timer expiring and
-   `resolvePendingDungeons()` clearing it (should be invisible at 60fps
-   given call ordering in `loop()`, per this session's trace, but
-   worth eyeballing once).
-4. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
-   upkeep is actually firing — see item 2 above, these are two
-   separate gaps) — unchanged.
-5. Real art integration (still 100% placeholder) — unchanged.
-6. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
-   just sit in inventory) — unchanged.
-7. Remove the stray `chicken-saga-village-doctest-session.patch`
-   file — flagged multiple sessions running now (2026-07-18, then
-   again 2026-07-21 backend session), still on `origin/main` as of
-   this session. Nobody has actually removed it yet; someone should
-   just do it next time rather than re-flagging again.
+1. **NEW — found by a prior session, not fixed (out of scope for that
+   ticket, still needs its own dedicated pass):** `applyUpkeep()` is
+   called from `main.js`'s `loop(now)` using the
+   `requestAnimationFrame` timestamp (time since page load) as its
+   `now` argument, but `upkeepState.lastCheckedAt` is initialized with
+   `Date.now()` (epoch ms) in `createUpkeepState()`. Those are
+   different clocks — `now - lastCheckedAt` is a huge negative number
+   on every call, so egg upkeep likely never actually consumes
+   anything in practice. Separate from the "no consequence at 0 egg"
+   design gap below — this is upkeep not firing *at all*. Not touched
+   this session either (out of scope for Documentation & Testing on
+   the Heroes/Dungeons ticket; still deserves a dedicated pass per the
+   prior session's reasoning, not a drive-by fix folded into an
+   unrelated task).
+2. **Playtest Heroes + Dungeons in an actual browser** — thoroughly
+   verified via persistent tests + code review, but still not a human
+   looking at it in a live browser. In particular: the roster row's
+   countdown display in the sub-frame window between a mission's timer
+   expiring and `resolvePendingDungeons()` clearing it, per the prior
+   session's trace.
+3. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
+   upkeep is actually firing — see item 1 above, two separate gaps) —
+   unchanged.
+4. Real art integration (still 100% placeholder) — unchanged.
+5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+   just sit in inventory) — unchanged. Now also relevant to
+   Heroes/Dungeons per the original proposal's non-goals (refined
+   goods as hero materials is explicitly deferred, not forgotten).
 
 ## Frontend Session: Heroes + Dungeons UI (2026-07-21)
 **Scope:** `openspec/changes/add-heroes-dungeons/tasks.md` 2.1–2.5.
@@ -948,3 +935,79 @@ application), not meant to live in the repo.
     Any new building or persisted state should be added the same way
     — don't invent a parallel pattern for unlock config or state
     composition.
+- **2026-07-21 (Documentation & Testing — Heroes + Dungeons)**: Fresh
+  clone (explicit instruction this session to always clone/read live
+  state, not reuse any local copy — noting this out loud since it
+  directly addresses a stale-folder issue from an earlier session;
+  worth repeating until it's clearly not a recurring problem).
+  Confirmed via `openspec/changes/add-heroes-dungeons/tasks.md` that
+  Backend/Frontend/Code Reviewer sections were all checked off and
+  only Documentation & Testing (4.1–4.5) remained. Found
+  `heroes.test.js`/`dungeons.test.js` sitting in `js/` instead of
+  `test/` — they ran fine (Node's default `node --test` discovery
+  isn't limited to `test/`, it globs `*.test.js` project-wide) but
+  violated this project's own stated convention and would have looked
+  like an oversight to any future session trusting the README's
+  description of `test/`. Moved both with `git mv` (preserves
+  history), reran the full suite from the new location to confirm
+  (163/163 at that point). Read both test files in full before
+  touching anything else — they're already thorough (weighted-roll
+  distribution checks, exact rarity-boundary mocking via
+  `Math.random`, the busy/idle boundary regression case, partial-
+  credit reward/XP flooring, batch resolution) — so 4.1 needed
+  relocation, not rewriting. Noticed `gameState.test.js` had zero
+  coverage of hero roster persistence (create/round-trip/corrupted-
+  data-guard/busy-hero-survives-reload) and added it, since save/load
+  correctness for every new state shape is this project's established
+  bar. Wrote `openspec/specs/hero-system/spec.md` and
+  `openspec/specs/dungeon-system/spec.md` (4.2) by reading the actual
+  shipped `heroes.js`/`dungeons.js`/`main.js` source directly — not
+  copied from the original `proposal.md`/`design.md`, per this
+  project's standing "specs describe what's real" convention (caught
+  one place where shipped code deliberately deviated from the design
+  doc: `dungeonTier` was added to the hero object as a pragmatic
+  choice not listed in design.md's original persistence section —
+  documented the deviation and why, not silently reconciled it).
+  Updated `world-map` spec's building count (13→15, verified by
+  actually counting `map.js`'s `interactables` array rather than
+  trusting arithmetic) and added Barracks/Dungeon Gate placement
+  reasoning (4.3). Deleted `openspec/changes/add-heroes-dungeons/`
+  (4.4) — confirmed this matches the project's already-active
+  convention, since every other previously-merged `changes/` folder
+  was already gone before this session touched anything. Also updated
+  `README.md`'s and `docs/ARCHITECTURE.md`'s module lists/lookup
+  tables to include `heroes.js`/`dungeons.js`, since both docs
+  explicitly enumerate every `js/` file and would otherwise have gone
+  stale the moment this session ended. Corrected a stale flag while
+  here: the prior Backend session's note that
+  `chicken-saga-village-doctest-session.patch` was "still on
+  `origin/main`" turned out to be outdated — verified via this
+  session's fresh clone that the file is actually gone (applied
+  sometime between that flag being written and this session
+  starting); removed the stale re-flag from Active Tasks rather than
+  perpetuating it a third time. **Deliberately did not touch** the
+  `applyUpkeep()`/`requestAnimationFrame`-vs-`Date.now()` clock-
+  mismatch bug flagged by the prior Backend session — out of scope
+  for a Documentation & Testing pass on the Heroes/Dungeons ticket,
+  and the prior session's own reasoning (a balance-affecting fix
+  shouldn't be a drive-by change bundled into an unrelated task) still
+  holds; carried the flag forward as-is in Active Tasks. Verification:
+  `node --check` on every `js/*.js` file, full suite 165/165 passing
+  (was 163 before this session's added `gameState.test.js` coverage).
+  Docs-only + test-relocation + one new test file's worth of code
+  touched — no gameplay logic changed. No push credentials in this
+  sandbox (same as every prior session); packaged as a patch + zip for
+  manual application, per established handoff process. Files added:
+  `openspec/specs/hero-system/spec.md`,
+  `openspec/specs/dungeon-system/spec.md`. Files modified:
+  `README.md`, `docs/ARCHITECTURE.md`,
+  `openspec/specs/world-map/spec.md`, `test/gameState.test.js`,
+  `memory.md`. Files moved: `js/heroes.test.js` → `test/heroes.test.js`,
+  `js/dungeons.test.js` → `test/dungeons.test.js`. Files/folders
+  deleted: `openspec/changes/add-heroes-dungeons/` (all 3 files).
+  **Next recommended task:** the `applyUpkeep()` clock-mismatch bug
+  (Active Tasks #1) is the most concrete/actionable open item — small,
+  well-understood, just deliberately out of scope for every session
+  that's found it so far. Otherwise: real in-browser playtest of
+  Heroes + Dungeons (Active Task #2), still nobody's actually clicked
+  through it live.

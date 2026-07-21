@@ -74,6 +74,10 @@ js/
   questBoard.js         Farmer Joe's quest list and rewards
   luckyWheel.js         Free spin mechanic: ticket accrual, weighted
                       rewards, Town-Hall-scaled payouts
+  heroes.js              Hero roster: weighted-rarity recruitment,
+                      leveling/XP, power calculation
+  dungeons.js            Dungeon Gate: timed missions, deterministic
+                      power-vs-difficulty resolution (lazy, not a timer)
   render.js / sprites.js / spriteRenderer.js   Canvas drawing
 openspec/
   specs/               Current-state feature specs, one per system

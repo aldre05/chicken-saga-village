@@ -17,13 +17,14 @@ The codebase splits cleanly into two kinds of files:
 
 1. **Pure logic modules** (`resources.js`, `buildingLevels.js`,
    `buildingUnlocks.js`, `townHall.js`, `workers.js`, `upkeep.js`,
-   `crafting.js`, `questBoard.js`, `luckyWheel.js`, `interactions.js`,
-   `interactionHandlers.js`, `camera.js`, `gameState.js`, `map.js`,
-   `tileConfig.js`). These have no DOM/Canvas dependency (aside from
-   `gameState.js`'s two `localStorage` calls) — they take state
-   objects in and return values or mutate the state in place. This is
-   what `test/` covers, and it's why the test suite can run under
-   plain Node with no browser or jsdom.
+   `crafting.js`, `questBoard.js`, `luckyWheel.js`, `heroes.js`,
+   `dungeons.js`, `interactions.js`, `interactionHandlers.js`,
+   `camera.js`, `gameState.js`, `map.js`, `tileConfig.js`). These have
+   no DOM/Canvas dependency (aside from `gameState.js`'s two
+   `localStorage` calls) — they take state objects in and return
+   values or mutate the state in place. This is what `test/` covers,
+   and it's why the test suite can run under plain Node with no
+   browser or jsdom.
 2. **Presentation glue** (`main.js`, `render.js`, `player.js`,
    `sprites.js`, `spriteRenderer.js`). `main.js` is the only file that
    touches `document`/DOM elements; `render.js` + `spriteRenderer.js`
@@ -50,6 +51,7 @@ what a "game state" object looks like:
   questBoard:        { claimedQuestIds: [] }                              // questBoard.js
   luckyWheel:        { tickets, lastGeneratedAt, totalSpins }             // luckyWheel.js
   upkeep:            { lastCheckedAt }                                    // upkeep.js
+  heroes:            { roster: [heroObj, ...] }                          // heroes.js (dungeons.js reads/writes hero fields directly, no separate dungeon state)
   popularity:        number
 }
 ```
@@ -152,6 +154,8 @@ throwing (wrapped in try/catch).
 | Add a crafting recipe | `crafting.js` (`RECIPES`) |
 | Add a quest | `questBoard.js` (`QUEST_LIST`) — needs a `check(gameState)` predicate and a `reward` dict |
 | Change Lucky Wheel odds/payouts | `luckyWheel.js` (`REWARD_TABLE`, `getRewardScale`) |
+| Change hero rarity stats/weights or leveling curve | `heroes.js` (`RARITY_TABLE`, `effectivePower`, `xpForNextLevel`) |
+| Change dungeon tiers/difficulty/rewards | `dungeons.js` (`DUNGEON_TIERS`) |
 | Change player movement/collision | `player.js` |
 | Change camera behavior | `camera.js` |
 | Change visuals/rendering | `render.js`, `sprites.js`, `spriteRenderer.js`, `styles.css` |

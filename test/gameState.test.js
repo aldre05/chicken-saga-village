@@ -21,6 +21,8 @@ describe('gameState.js', () => {
     assert.ok(state.questBoard);
     assert.ok(state.luckyWheel);
     assert.ok(state.upkeep);
+    assert.ok(state.heroes);
+    assert.deepEqual(state.heroes.roster, []);
     assert.equal(state.popularity, 0);
     assert.equal(state.townHall.level, 1);
   });
@@ -29,9 +31,10 @@ describe('gameState.js', () => {
     const state = loadGameState();
     assert.equal(state.townHall.level, 1);
     assert.equal(state.resources.carried.egg, 0);
+    assert.deepEqual(state.heroes.roster, []);
   });
 
-  test('save -> load round-trip preserves resource, level, and unlock progress exactly', () => {
+  test('save -> load round-trip preserves resource, level, unlock, and hero roster progress exactly', () => {
     const state = createGameState();
     state.resources.carried.egg = 42;
     state.resources.carried.wood = 7;
@@ -40,6 +43,10 @@ describe('gameState.js', () => {
     state.buildingUnlocks.nest_bundle = true;
     state.workers.assignments.egg = 2;
     state.popularity = 15;
+    state.heroes.roster.push({
+      id: 'hero_test1', name: 'Rooster Ronin', rarity: 'common',
+      level: 3, xp: 12, busyUntil: null, dungeonTier: null
+    });
 
     saveGameState(state);
     const loaded = loadGameState();
@@ -51,6 +58,31 @@ describe('gameState.js', () => {
     assert.equal(loaded.buildingUnlocks.nest_bundle, true);
     assert.equal(loaded.workers.assignments.egg, 2);
     assert.equal(loaded.popularity, 15);
+    assert.equal(loaded.heroes.roster.length, 1);
+    assert.equal(loaded.heroes.roster[0].id, 'hero_test1');
+    assert.equal(loaded.heroes.roster[0].level, 3);
+    assert.equal(loaded.heroes.roster[0].xp, 12);
+  });
+
+  test('loadGameState falls back to an empty roster if the saved heroes.roster is corrupted/non-array', () => {
+    globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
+      heroes: { roster: 'not-an-array' }
+    }));
+    const state = loadGameState();
+    assert.deepEqual(state.heroes.roster, []);
+  });
+
+  test('loadGameState preserves a busy hero\'s busyUntil/dungeonTier through save/load (mid-mission progress survives a reload)', () => {
+    const state = createGameState();
+    const busyUntil = Date.now() + 999999;
+    state.heroes.roster.push({
+      id: 'hero_busy', name: 'Featherblade', rarity: 'rare',
+      level: 1, xp: 0, busyUntil, dungeonTier: 'medium'
+    });
+    saveGameState(state);
+    const loaded = loadGameState();
+    assert.equal(loaded.heroes.roster[0].busyUntil, busyUntil);
+    assert.equal(loaded.heroes.roster[0].dungeonTier, 'medium');
   });
 
   test('loadGameState recovers gracefully from corrupted JSON in localStorage', () => {

@@ -12,6 +12,8 @@ import { getIdleWorkers } from './workers.js';
 import { UNLOCK_CONFIG, isBuildingUnlocked, meetsTownHallRequirement } from './buildingUnlocks.js';
 import { getMaxWorkers, getRateMultiplier, getCapMultiplier, getHouseCapacity, isHouseMaxed, HOUSE_IDS } from './buildingLevels.js';
 import { getReadyToClaimQuests, getAvailableQuests, claimQuest } from './questBoard.js';
+import { isHeroIdle } from './heroes.js';
+import { resolveReadyDungeons } from './dungeons.js';
 
 // Maps a resource-producing building's id to which resource it produces.
 export const BUILDING_RESOURCE = {
@@ -169,6 +171,62 @@ export const HANDLERS = {
 
       const listText = remaining.map(q => `• ${q.name}: ${q.desc} (+${formatCost(q.reward)})`).join('\n');
       return { title: 'Farmer Joe', text: claimedText + `Quests:\n${listText}` };
+    }
+  },
+
+  barracks: {
+    interact(gameState) {
+      const unlockCfg = UNLOCK_CONFIG.barracks;
+
+      if (!isBuildingUnlocked(gameState.buildingUnlocks, 'barracks')) {
+        if (!meetsTownHallRequirement('barracks', gameState.townHall.level)) {
+          return { title: 'Barracks', text: `Requires Town Hall level ${unlockCfg.requiresTownHall} to unlock.` };
+        }
+        return { title: 'Barracks', text: `Needs ${formatCost(unlockCfg.cost)} to unlock. Use the Unlock button.` };
+      }
+
+      const count = gameState.heroes.roster.length;
+      return {
+        title: 'Barracks',
+        text: count === 0
+          ? 'No heroes recruited yet. Use the panel below to recruit one.'
+          : `${count} hero${count === 1 ? '' : 'es'} recruited. Use the panel below to recruit more or manage your roster.`
+      };
+    }
+  },
+
+  dungeon_gate: {
+    interact(gameState) {
+      const unlockCfg = UNLOCK_CONFIG.dungeon_gate;
+
+      if (!isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate')) {
+        if (!meetsTownHallRequirement('dungeon_gate', gameState.townHall.level)) {
+          return { title: 'Dungeon Gate', text: `Requires Town Hall level ${unlockCfg.requiresTownHall} to unlock.` };
+        }
+        return { title: 'Dungeon Gate', text: `Needs ${formatCost(unlockCfg.cost)} to unlock. Use the Unlock button.` };
+      }
+
+      // Lazy resolution: same "check on next interaction" pattern as
+      // Lucky Wheel ticket accrual, not a background timer.
+      const now = Date.now();
+      const results = resolveReadyDungeons(gameState.heroes, gameState.resources, now);
+      if (results.length > 0) {
+        const summaries = results.map(r =>
+          `${r.hero.name}: ${r.success ? 'Success! Full reward.' : 'Partial credit.'} (+${formatCost(r.reward)}, +${r.xp} XP)`
+        );
+        return { title: 'Dungeon Gate', text: `Missions resolved!\n${summaries.join('\n')}` };
+      }
+
+      if (gameState.heroes.roster.length === 0) {
+        return { title: 'Dungeon Gate', text: 'No heroes recruited yet — visit the Barracks first.' };
+      }
+
+      const idleCount = gameState.heroes.roster.filter(h => isHeroIdle(h, now)).length;
+      const busyCount = gameState.heroes.roster.length - idleCount;
+      return {
+        title: 'Dungeon Gate',
+        text: `${idleCount} idle, ${busyCount} on a mission. Use the panel below to send an idle hero.`
+      };
     }
   }
 };

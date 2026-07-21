@@ -11,6 +11,7 @@ import { createBuildingLevelState, getMaxWorkers, HOUSE_IDS } from './buildingLe
 import { createQuestBoardState } from './questBoard.js';
 import { createLuckyWheelState } from './luckyWheel.js';
 import { createUpkeepState } from './upkeep.js';
+import { createHeroRosterState } from './heroes.js';
 
 const SAVE_KEY = 'chickenVillageSave';
 
@@ -25,6 +26,7 @@ export function createGameState() {
     questBoard: createQuestBoardState(),
     luckyWheel: createLuckyWheelState(),
     upkeep: createUpkeepState(),
+    heroes: createHeroRosterState(),
     popularity: 0
   };
 }
@@ -94,6 +96,15 @@ export function loadGameState() {
       questBoard: { ...fresh.questBoard, ...parsed.questBoard },
       luckyWheel: { ...fresh.luckyWheel, ...parsed.luckyWheel },
       upkeep: { ...fresh.upkeep, ...parsed.upkeep },
+      // New state (no prior save format to migrate from) — merge like
+      // luckyWheel/upkeep above, but guard the roster array itself
+      // since a corrupted/non-array value would break every roster
+      // consumer (.push/.find/.filter) downstream.
+      heroes: {
+        ...fresh.heroes,
+        ...parsed.heroes,
+        roster: Array.isArray(parsed.heroes && parsed.heroes.roster) ? parsed.heroes.roster : fresh.heroes.roster
+      },
       popularity: typeof parsed.popularity === 'number' ? parsed.popularity : 0
     };
 

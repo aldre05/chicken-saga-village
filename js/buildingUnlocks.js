@@ -16,7 +16,9 @@ export const UNLOCK_CONFIG = {
   house_2:     { requiresTownHall: 2, cost: { egg: 20, feathers: 10 } },
   house_3:     { requiresTownHall: 3, cost: { egg: 40, feathers: 25 } },
   house_4:     { requiresTownHall: 4, cost: { egg: 70, feathers: 45 } },
-  house_5:     { requiresTownHall: 5, cost: { egg: 110, feathers: 70 } }
+  house_5:     { requiresTownHall: 5, cost: { egg: 110, feathers: 70 } },
+  barracks:     { requiresTownHall: 3, cost: { egg: 50, feathers: 30 } },
+  dungeon_gate: { requiresTownHall: 4, cost: { egg: 80, feathers: 50 } }
 };
 
 export function createBuildingUnlockState() {

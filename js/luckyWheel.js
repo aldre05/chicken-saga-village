@@ -62,14 +62,22 @@ export function getMsUntilNextTicket(state, now, townHallLevel) {
   return { atCap: false, msRemaining: TICKET_INTERVAL_MS - elapsedMs };
 }
 
-function pickWeightedReward() {
-  const totalWeight = REWARD_TABLE.reduce((sum, r) => sum + r.weight, 0);
+// Generic weighted-random pick, exported so other systems (e.g. the
+// hero recruitment gacha in heroes.js) can reuse this exact algorithm
+// instead of reimplementing it. Entries need a numeric `weight`
+// property (or pass a different key name).
+export function pickWeighted(entries, weightKey = 'weight') {
+  const totalWeight = entries.reduce((sum, e) => sum + e[weightKey], 0);
   let roll = Math.random() * totalWeight;
-  for (const entry of REWARD_TABLE) {
-    if (roll < entry.weight) return entry;
-    roll -= entry.weight;
+  for (const entry of entries) {
+    if (roll < entry[weightKey]) return entry;
+    roll -= entry[weightKey];
   }
-  return REWARD_TABLE[REWARD_TABLE.length - 1];
+  return entries[entries.length - 1];
+}
+
+function pickWeightedReward() {
+  return pickWeighted(REWARD_TABLE);
 }
 
 // Rewards scale with Town Hall level so spins stay meaningful late-game

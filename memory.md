@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-18_
+_Last updated: 2026-07-21_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,28 +10,141 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Test suite (124 tests), README, architecture doc, and CI workflow are
-all in place as of the 2026-07-17/18 sessions. This session archived
-the previously-unrecorded Lucky Wheel/crafting/layout/unlock-button
-bug-fix batch (shipped 2026-07-16, never got an OpenSpec proposal)
-into `openspec/specs/` — `building-progression`, `lucky-wheel`, and
-`world-map` specs now describe the actual current, fixed behavior
-with root causes noted, not the earlier buggy versions. No code
-changes this session (docs-only).
+Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`) frontend
+tasks (2.1–2.5) are complete as of this session: Barracks + Dungeon
+Gate placed on the map, hero-roster panel, dungeon tier/hero-picker
+panel, busy-hero countdown, and differentiated success/partial-credit
+floating popups on mission resolution. Backend's prerequisites
+(1.1–1.5: `heroes.js`, `dungeons.js`, unlock config, save-state roster,
+interaction handlers) were already in place — verified directly
+against the code before starting, not assumed from `tasks.md`
+checkboxes (which were still unchecked). Code Reviewer + Docs/Testing
+tasks (3.x, 4.x) are still open — see Active Tasks.
 
 ## Active Tasks
-1. **Playtest the fixes**, especially the Lucky Wheel (both bugs were
-   root-caused and fixed via code reasoning, not visual testing —
-   worth confirming they look right in an actual browser). Still open
-   — nothing in this session touched the Lucky Wheel visuals, and
-   `main.js`/`render.js` are explicitly NOT covered by the new
-   automated test suite (DOM/Canvas glue — see Testing section below).
-2. ~~Archive prior sessions' changes into `openspec/`~~ — **done this
-   session**, see "OpenSpec Archival" below.
-3. Decide egg-upkeep consequences (still a no-op at 0 egg) — unchanged.
-4. Real art integration (still 100% placeholder) — unchanged.
-5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+1. **Code Reviewer sign-off on Heroes + Dungeons** (tasks.md 3.1–3.5):
+   recruit-roll distribution, dungeon-resolution math at the exact
+   `power == difficulty` boundary, busy-hero double-send edge case,
+   full `npm test` + import-graph pass, and confirming nothing touched
+   the NFT/monetization non-goals list. This session's own
+   verification (below) covers some of this ground but isn't a
+   substitute for an independent review pass.
+2. **Docs/Testing for Heroes + Dungeons** (tasks.md 4.1–4.5): persistent
+   `test/heroes.test.js` + `test/dungeons.test.js` (pure-logic, easy —
+   `heroes.js`/`dungeons.js` have zero DOM dependency, same shape as
+   every other test file in `test/`), new specs, `world-map` spec
+   update for the 2 new buildings, archive `openspec/changes/`,
+   memory.md wrap-up.
+3. **NEW — found this session, not fixed (out of scope, flagging for
+   triage):** `applyUpkeep()` is called from `main.js`'s `loop(now)`
+   using the `requestAnimationFrame` timestamp (time since page load)
+   as its `now` argument, but `upkeepState.lastCheckedAt` is
+   initialized with `Date.now()` (epoch ms) in `createUpkeepState()`.
+   Those are different clocks — `now - lastCheckedAt` is a huge
+   negative number on every call, so `applyUpkeep`'s early-return path
+   (`if (consumed <= 0) return 0;`) fires every time *without*
+   advancing `lastCheckedAt`, meaning egg upkeep likely never actually
+   consumes anything in practice. This is separate from the
+   already-tracked "no consequence at 0 egg" design gap (item 6 below)
+   — this is upkeep not firing *at all*, a functional bug not a
+   deferred design decision. Didn't fix it here: it's unrelated to the
+   Heroes/Dungeons ticket, and silently starting to consume egg
+   mid-unrelated-PR is a balance change that deserves its own
+   dedicated pass, not a drive-by fix. Whoever picks this up should
+   double check by adding a quick `test/upkeep.test.js` case that
+   drives `loop()`'s actual call pattern (or just fix the call site to
+   pass `Date.now()` instead of the rAF timestamp — likely the
+   simplest correct fix, but flagging rather than assuming).
+4. **Playtest the Heroes + Dungeons UI** in an actual browser — this
+   session's verification was thorough (see below) but is still
+   code-reasoning + headless-jsdom, not a human looking at it.
+5. Real art integration (still 100% placeholder) — unchanged.
+6. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
+   upkeep is actually firing — see item 3 above, these are two
+   separate gaps) — unchanged.
+7. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
    just sit in inventory) — unchanged.
+
+## Frontend Session: Heroes + Dungeons UI (2026-07-21)
+**Scope:** `openspec/changes/add-heroes-dungeons/tasks.md` 2.1–2.5.
+
+**2.1 Map placement:** Barracks (2×2, col17/row15) + Dungeon Gate
+(2×2, col20/row15) — open ground just below the Town Hall/Workbench
+footprint, clear of the vertical path (col15) and the house cluster.
+Ran the project's existing automated collision/bounds test
+(`test/map.test.js`, already covers "no two footprints overlap" +
+"stays within map bounds" generically over the whole `interactables`
+array) — all 123 tests pass, no manual eyeballing required.
+
+**2.2/2.3 Panels:** New `heroPanel` (Barracks) and `dungeonPanel`
+(Dungeon Gate) in `index.html`/`styles.css`/`main.js`, following the
+exact pattern Workbench/crafting-panel already established: locked
+state reuses the *generic* building-panel Unlock button (just added
+`isBarracks`/`isDungeonGate` to `updateBuildingPanel`'s type
+recognition — the locked branch itself needed zero changes since it's
+already keyed off `UNLOCK_CONFIG[buildingId]` generically); once
+unlocked, the standard panel hides and the dedicated panel takes over
+entirely. Dungeon panel is a tier-picker + idle-hero-picker (click to
+select, `.selected` class), auto-picks the first idle hero, entry cost
+reuses `formatCostHTML` (so red-insufficient-highlighting comes free).
+
+**2.4 Countdown:** Refactored `formatCountdown` into `formatDuration`
+(raw "Xm YYs") + `formatCountdown` (adds "Next: " prefix, used by
+Lucky Wheel, unchanged) so the hero roster row's busy-status countdown
+reuses the same formatter without duplicating logic.
+
+**2.5 Resolution popups:** `resolvePendingDungeons()` runs every frame
+in `loop()` (same lazy-resolution timing as Lucky Wheel ticket
+accrual — independent of player position), spawns a floating popup at
+the Dungeon Gate per resolved mission: `✅ ... success text` vs
+`⚠️ ... partial credit text`, visually distinguished.
+
+**Verification performed (all before committing):**
+- `node --check` on `main.js`/`map.js` — clean.
+- Full `npm test` equivalent (`node --test test/*.test.js` — note:
+  `npm test`'s literal script, `node --test test/`, currently fails
+  with `MODULE_NOT_FOUND` on this Node version/environment; pre-existing
+  environment quirk unrelated to this change, worth a quick look by
+  whoever owns CI) — 123/123 passing both before and after.
+- Static import-graph check: every symbol `main.js` imports from
+  `heroes.js`/`dungeons.js` confirmed to actually exist as an export.
+- **Headless jsdom smoke test** (temporary script, not committed —
+  see below): booted `main.js` for real in a jsdom DOM against a
+  seeded `localStorage` save (using the actual `gameState.js` save
+  format, not internal hooks), with a stubbed no-op canvas 2D context.
+  Confirmed: (a) no runtime errors loading/running the game loop, (b)
+  an already-expired dungeon mission resolves automatically within a
+  couple of frames *regardless of player position*, producing a real
+  floating-popup DOM element, (c) an overpowered hero (Epic Lv.5 vs.
+  Easy) produces a `✅` full-success popup with the exact expected
+  reward text, (d) an underpowered hero (Common Lv.1 vs. Hard)
+  produces a `⚠️` partial-credit popup with correctly floored 50%
+  rewards (`125🥚 60🐓 40🌲 25🌾` from a `250/120/80/50` full reward).
+  This is real coverage of the riskiest new logic (timing-dependent
+  lazy resolution + success/partial branching), not just static
+  reasoning. **Not committed**: this project's standing convention is
+  persistent tests in `test/`, not throwaway scripts, and adding
+  `jsdom` as a permanent devDependency + DOM-level test harness is a
+  bigger infra decision than this ticket covers — flagging as a
+  possible future addition to the testing setup (could live alongside
+  `test/` as a `test/dom/` smoke-test tier) rather than deciding
+  unilaterally. The script itself (and the `jsdom` npm install used to
+  run it) were deleted after use; nothing extra was left in the repo.
+
+**Files touched:** `js/map.js`, `js/main.js`, `index.html`,
+`styles.css`, `openspec/changes/add-heroes-dungeons/tasks.md` (checked
+off 2.1–2.5), `memory.md`.
+
+**Opportunistic fix (not scope creep — same files, one line each):**
+`:root` in `styles.css` was missing `--rust-red-bright` and
+`--panel-wood-light`, both referenced elsewhere in the file (upgrade
+button hover, zero-rate text, crafting-recipe-row background) but
+never defined, silently degrading. Defined both with theme-consistent
+values since the new hero/dungeon panels reuse those same classes.
+
+**Known UI issues (new):** None found in the new panels themselves
+after verification. Pre-existing gap noted above (upkeep clock
+mismatch) is not a UI issue, it's a `main.js` game-loop wiring bug.
 
 ## Testing Infrastructure (New, 2026-07-17)
 **Added a real, persistent automated test suite** — `test/`, using
@@ -429,6 +542,31 @@ deliverables — it was a delivery artifact (a git patch for manual
 application), not meant to live in the repo.
 
 ## Session Log
+- **2026-07-21 (Frontend)**: Cloned fresh per explicit instruction
+  (not reused local copy — confirmed HEAD was ahead of my last
+  session's clone, so this mattered). Implemented Heroes + Dungeons
+  frontend tasks 2.1–2.5 (map placement, hero-roster panel, dungeon
+  tier/hero-picker panel, busy countdown, resolution popups) after
+  reading `openspec/changes/add-heroes-dungeons/` and verifying
+  Backend's prerequisites were actually in the code (not just checked
+  off in tasks.md — they were still unchecked, code was done anyway).
+  Verified via `node --check`, full `npm test`-equivalent (123/123
+  pass), a static import-graph check, and a temporary headless-jsdom
+  smoke test (deleted after use) that booted the real game loop from
+  a seeded save and confirmed both the success and partial-credit
+  dungeon-resolution paths produce correct output end-to-end — not
+  just code-reasoned. Also fixed a small pre-existing CSS gap
+  (`--rust-red-bright`/`--panel-wood-light` referenced but never
+  defined in `:root`). Found but explicitly did NOT fix (flagged in
+  Active Tasks instead, out of this ticket's scope): `applyUpkeep()`
+  in the main loop is fed a `requestAnimationFrame` timestamp instead
+  of `Date.now()`, so egg upkeep likely never actually fires. Checked
+  off tasks.md 2.1–2.5. Files touched: `js/map.js`, `js/main.js`,
+  `index.html`, `styles.css`,
+  `openspec/changes/add-heroes-dungeons/tasks.md`, `memory.md`. Not
+  pushed to GitHub — no git credentials in this execution environment
+  (confirmed by attempting `git push`); delivering via committed local
+  history for the user to upload, per established workflow.
 - **This session (Code Reviewer)**: Full-repo review pass, not scoped
   to one feature. Found and fixed one real bug: the camera's
   viewport dimensions went stale on browser window resize because

@@ -3,9 +3,11 @@
 :root {
   --barnwood: #2b1d14;
   --panel-wood: #3d2b1f;
+  --panel-wood-light: #4a3626;
   --egg-gold: #e8b84b;
   --egg-gold-bright: #f4ce6e;
   --rust-red: #a64b3a;
+  --rust-red-bright: #c96650;
   --parchment: #f2e8d2;
   --parchment-dim: #c9bc9f;
   --divider: #5a4432;
@@ -514,4 +516,171 @@ body {
 @keyframes hudWarningPulse {
   0%, 100% { background: var(--panel-wood); }
   50% { background: rgba(166, 75, 58, 0.4); }
+}
+
+/* --- Barracks (hero roster) + Dungeon Gate panels — reuse the same
+   floating-panel shell as .crafting-panel, and the same
+   row/button visual language, to keep the UI consistent with every
+   other building panel. --- */
+.hero-panel, .dungeon-panel {
+  position: absolute;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(20, 14, 10, 0.94);
+  border: 1px solid var(--egg-gold);
+  border-radius: 8px;
+  padding: 10px 14px;
+  z-index: 40;
+  min-width: 260px;
+  max-width: 92%;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.hero-panel-title, .dungeon-panel-title {
+  font-family: var(--font-display);
+  color: var(--egg-gold-bright);
+  font-size: 1rem;
+  margin-bottom: 6px;
+}
+
+.hero-panel-recruit-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
+}
+.recruit-btn, .send-hero-btn {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--rust-red);
+  color: var(--parchment);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.recruit-btn:hover:not(:disabled), .send-hero-btn:hover:not(:disabled) { background: var(--rust-red-bright); }
+.recruit-btn:disabled, .send-hero-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.recruit-cost, .dungeon-entry-cost {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+}
+
+.hero-roster-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hero-roster-empty, .dungeon-hero-empty {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+  padding: 4px 2px;
+}
+.hero-roster-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--panel-wood-light);
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+.hero-roster-info {
+  display: flex;
+  flex-direction: column;
+}
+.hero-roster-name {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--parchment);
+  font-weight: 600;
+}
+.hero-roster-stats {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--parchment-dim);
+}
+.hero-roster-status {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+.hero-status-idle { color: var(--egg-gold-bright); }
+.hero-status-busy { color: var(--rust-red-bright); }
+
+.dungeon-tier-list {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.dungeon-tier-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--parchment);
+  background: var(--panel-wood-light);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+.dungeon-tier-btn:hover { border-color: var(--egg-gold); }
+.dungeon-tier-btn.selected {
+  border-color: var(--egg-gold-bright);
+  background: var(--rust-red);
+}
+.dungeon-tier-meta {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--parchment-dim);
+}
+
+.dungeon-hero-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.dungeon-hero-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  color: var(--parchment);
+  background: var(--panel-wood-light);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.dungeon-hero-btn:hover { border-color: var(--egg-gold); }
+.dungeon-hero-btn.selected {
+  border-color: var(--egg-gold-bright);
+  background: var(--rust-red);
+}
+.dungeon-hero-power {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--parchment-dim);
+}
+.dungeon-panel-send-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--divider);
 }

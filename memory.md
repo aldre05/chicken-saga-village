@@ -550,3 +550,87 @@ application), not meant to live in the repo.
   `openspec/specs/lucky-wheel/spec.md`,
   `openspec/specs/world-map/spec.md`, `memory.md`. Files removed:
   `chicken-saga-village-doctest-session.patch`.
+- **2026-07-21 (Backend Engineer — Heroes/Dungeons, tasks 1.1-1.5)**:
+  Fresh clone confirmed live state (CI green on all 9 runs; the
+  npm-test risk flagged 2026-07-18 never materialized — Node 20 on
+  the real Actions runner handles `node --test test/` fine, that was
+  a sandbox-only Node 22 quirk). **Also found the 2026-07-18 doc-vs-
+  reality mismatch**: `chicken-saga-village-doctest-session.patch`
+  removal was logged as done but was only ever a local sandbox
+  change, never pushed — file is still on `origin/main` as of this
+  session. Not yet removed (deferred to developer this round; flagged
+  again for whoever picks it up).
+  Implemented the 5 Backend Engineer tasks from
+  `openspec/changes/add-heroes-dungeons/tasks.md` against
+  `design.md`:
+  - `js/heroes.js` (new): hero data model, `RARITY_TABLE`
+    (common/rare/epic weights+stats per design.md), `recruitHero()`
+    (weighted roll), `effectivePower()` (+10%/level, capped at 20),
+    `grantXp()` (chained level-ups), `RECRUIT_COST`.
+  - `js/dungeons.js` (new): `DUNGEON_TIERS` (easy/medium/hard config
+    per design.md), `sendHeroToDungeon()`, `resolveDungeon()` (lazy,
+    deterministic power-vs-difficulty check, 50%-floored partial
+    credit on failure), `resolveReadyDungeons()` (batch/lazy resolve
+    on next interaction).
+  - `js/luckyWheel.js`: extracted the private `pickWeightedReward()`
+    algorithm into an exported generic `pickWeighted(entries,
+    weightKey)` so heroes.js genuinely reuses the Lucky Wheel's
+    weighted-pick pattern (imports it) instead of a parallel
+    reimplementation — tasks.md said "reuse... don't reimplement", so
+    treated that as license to make the shared piece explicit rather
+    than just copy the algorithm by hand. Reward-table behavior is
+    byte-for-byte unchanged (same random roll math), confirmed by the
+    existing Lucky Wheel tests still passing untouched.
+  - `js/buildingUnlocks.js`: added `barracks` (TH3, `{egg:50,
+    feathers:30}`) and `dungeon_gate` (TH4, `{egg:80, feathers:50}`)
+    to `UNLOCK_CONFIG`, matching design.md exactly.
+  - `js/gameState.js`: added `heroes: createHeroRosterState()` to
+    `createGameState()`; `loadGameState()` merges it like
+    luckyWheel/upkeep (no migration needed, it's new state) but
+    guards `roster` specifically to a real array (falls back to an
+    empty roster) since a corrupted/non-array value would break every
+    downstream roster consumer.
+  - `js/interactionHandlers.js`: added `barracks` and `dungeon_gate`
+    handlers following the exact existing unlock-check pattern
+    (locked → requirement/cost text, unlocked → info-only, actual
+    recruit/send stays button-driven per tasks.md 1.5). Dungeon
+    Gate's handler calls `resolveReadyDungeons()` on every interact
+    — this is where the lazy resolution actually gets triggered.
+  **One deliberate deviation from design.md, flagged for the next
+  session/reviewer:** design.md's hero persistence shape is `{ id,
+  name, rarity, level, xp, busyUntil }` — that's enough to know a
+  hero is busy, but not *which dungeon tier* it's running (needed to
+  resolve rewards/difficulty). Rather than add a separate "dungeon
+  state" object (design.md explicitly says not to), added one more
+  nullable field directly on the hero object: `dungeonTier`. Same
+  spirit as keeping busy/idle status on the hero, just enough extra
+  to make resolution possible. Documented inline in `heroes.js` too.
+  **Verification:** `node --check` on all 6 touched/new files;
+  `node --test` full suite still 124/124 (unchanged — no test files
+  touched, that's Documentation & Testing's task 4.1); import-graph
+  grep confirmed clean wiring (heroes.js → luckyWheel.js, dungeons.js
+  → heroes.js, gameState.js/interactionHandlers.js → heroes.js +
+  dungeons.js, no circular imports). Ran a throwaway functional
+  simulation (deleted after use, not committed) covering: recruit
+  affordability + cost deduction, rarity distribution roughly
+  matching 60/30/10 weights over 5000 rolls, power scaling exactness
+  at level 11 (should be exactly 2x base), XP chaining + level-20
+  cap, busy-hero double-send rejection, no-resolve-before-busyUntil,
+  full reward/XP on success, floored-half reward/XP on partial
+  credit, and multi-hero batch resolution via
+  `resolveReadyDungeons()` — all passed.
+  **Not done (out of scope for Backend Engineer):** map.js placement,
+  any UI/panels, countdown display, floating popups (Frontend
+  Engineer tasks 2.1-2.5); `test/heroes.test.js`/`test/dungeons.test.js`,
+  new specs, world-map spec update, changes-folder archival
+  (Documentation & Testing tasks 4.1-4.4); weighted-roll/resolution-
+  math verification and sign-off (Code Reviewer tasks 3.1-3.5).
+  Files modified: `js/luckyWheel.js`, `js/buildingUnlocks.js`,
+  `js/gameState.js`, `js/interactionHandlers.js`. Files added:
+  `js/heroes.js`, `js/dungeons.js`.
+  **Next backend task:** none queued from my side — Frontend Engineer
+  can now build the Barracks/Dungeon Gate panels against this API
+  surface (`recruitHero`, `getRarityStats`, `isHeroIdle`,
+  `sendHeroToDungeon`, `canSendHeroToDungeon`, `resolveReadyDungeons`,
+  `DUNGEON_TIERS`). Also still pending: remove the stray
+  `chicken-saga-village-doctest-session.patch` file (see above).

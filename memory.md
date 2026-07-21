@@ -10,32 +10,33 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`) frontend
-tasks (2.1–2.5) are complete as of this session: Barracks + Dungeon
-Gate placed on the map, hero-roster panel, dungeon tier/hero-picker
-panel, busy-hero countdown, and differentiated success/partial-credit
-floating popups on mission resolution. Backend's prerequisites
-(1.1–1.5: `heroes.js`, `dungeons.js`, unlock config, save-state roster,
-interaction handlers) were already in place — verified directly
-against the code before starting, not assumed from `tasks.md`
-checkboxes (which were still unchecked). Code Reviewer + Docs/Testing
-tasks (3.x, 4.x) are still open — see Active Tasks.
+Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`) is fully
+implemented and code-reviewed as of this session: Backend (1.1–1.5),
+Frontend (2.1–2.5), and Code Reviewer (3.1–3.5) tasks are all done.
+**Found and fixed a real bug during review** (see session log below):
+a hero could be re-sent on a new mission in the window right as its
+old mission's timer expired but before lazy resolution ran, silently
+discarding the original mission's reward — contradicted design.md's
+own stated intent. Fixed in `heroes.js`/`dungeons.js`, with a
+regression test that fails against the old code and passes against
+the fix (verified both directions). Only Documentation & Testing
+(4.1–4.5) remains: `test/heroes.test.js`/`test/dungeons.test.js` are
+now written as part of the Code Reviewer pass (task 3.x explicitly
+calls for persistent tests, so 4.1 is effectively also done — next
+session should confirm and check the box rather than write duplicate
+tests), but new specs, the `world-map` spec update, and archiving
+`openspec/changes/` are still open.
 
 ## Active Tasks
-1. **Code Reviewer sign-off on Heroes + Dungeons** (tasks.md 3.1–3.5):
-   recruit-roll distribution, dungeon-resolution math at the exact
-   `power == difficulty` boundary, busy-hero double-send edge case,
-   full `npm test` + import-graph pass, and confirming nothing touched
-   the NFT/monetization non-goals list. This session's own
-   verification (below) covers some of this ground but isn't a
-   substitute for an independent review pass.
-2. **Docs/Testing for Heroes + Dungeons** (tasks.md 4.1–4.5): persistent
-   `test/heroes.test.js` + `test/dungeons.test.js` (pure-logic, easy —
-   `heroes.js`/`dungeons.js` have zero DOM dependency, same shape as
-   every other test file in `test/`), new specs, `world-map` spec
-   update for the 2 new buildings, archive `openspec/changes/`,
-   memory.md wrap-up.
-3. **NEW — found this session, not fixed (out of scope, flagging for
+1. **Docs/Testing for Heroes + Dungeons** (tasks.md 4.1–4.5):
+   `test/heroes.test.js` + `test/dungeons.test.js` now exist (written
+   this session as part of Code Reviewer sign-off — confirm/check off
+   4.1 rather than rewriting), new specs
+   (`openspec/specs/hero-system/spec.md`,
+   `openspec/specs/dungeon-system/spec.md`), `world-map` spec update
+   for the 2 new buildings, archive `openspec/changes/` once specs
+   are written, memory.md wrap-up.
+2. **NEW — found this session, not fixed (out of scope, flagging for
    triage):** `applyUpkeep()` is called from `main.js`'s `loop(now)`
    using the `requestAnimationFrame` timestamp (time since page load)
    as its `now` argument, but `upkeepState.lastCheckedAt` is
@@ -45,7 +46,7 @@ tasks (3.x, 4.x) are still open — see Active Tasks.
    (`if (consumed <= 0) return 0;`) fires every time *without*
    advancing `lastCheckedAt`, meaning egg upkeep likely never actually
    consumes anything in practice. This is separate from the
-   already-tracked "no consequence at 0 egg" design gap (item 6 below)
+   already-tracked "no consequence at 0 egg" design gap (item 4 below)
    — this is upkeep not firing *at all*, a functional bug not a
    deferred design decision. Didn't fix it here: it's unrelated to the
    Heroes/Dungeons ticket, and silently starting to consume egg
@@ -55,15 +56,25 @@ tasks (3.x, 4.x) are still open — see Active Tasks.
    drives `loop()`'s actual call pattern (or just fix the call site to
    pass `Date.now()` instead of the rAF timestamp — likely the
    simplest correct fix, but flagging rather than assuming).
-4. **Playtest the Heroes + Dungeons UI** in an actual browser — this
-   session's verification was thorough (see below) but is still
-   code-reasoning + headless-jsdom, not a human looking at it.
-5. Real art integration (still 100% placeholder) — unchanged.
-6. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
-   upkeep is actually firing — see item 3 above, these are two
+3. **Playtest Heroes + Dungeons in an actual browser** — this and the
+   prior session's verification was thorough (persistent tests +
+   jsdom smoke test) but is still not a human looking at it. In
+   particular: confirm the roster row's countdown display looks right
+   in the sub-frame window between a mission's timer expiring and
+   `resolvePendingDungeons()` clearing it (should be invisible at 60fps
+   given call ordering in `loop()`, per this session's trace, but
+   worth eyeballing once).
+4. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
+   upkeep is actually firing — see item 2 above, these are two
    separate gaps) — unchanged.
-7. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
+5. Real art integration (still 100% placeholder) — unchanged.
+6. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
    just sit in inventory) — unchanged.
+7. Remove the stray `chicken-saga-village-doctest-session.patch`
+   file — flagged multiple sessions running now (2026-07-18, then
+   again 2026-07-21 backend session), still on `origin/main` as of
+   this session. Nobody has actually removed it yet; someone should
+   just do it next time rather than re-flagging again.
 
 ## Frontend Session: Heroes + Dungeons UI (2026-07-21)
 **Scope:** `openspec/changes/add-heroes-dungeons/tasks.md` 2.1–2.5.
@@ -542,6 +553,141 @@ deliverables — it was a delivery artifact (a git patch for manual
 application), not meant to live in the repo.
 
 ## Session Log
+- **2026-07-21 (Code Reviewer — Heroes/Dungeons sign-off, tasks
+  3.1-3.5):** Explicit instruction this session: fresh clone, don't
+  reuse any local copy — done (`git clone` from scratch, confirmed
+  HEAD before touching anything). Read
+  `openspec/changes/add-heroes-dungeons/{proposal,design,tasks}.md`
+  and `memory.md` before reviewing, per standing process; Backend
+  (1.1-1.5) and Frontend (2.1-2.5) tasks were already checked off and
+  verified against the actual code, not just trusted.
+
+  **Found and fixed a real bug (task 3.3's edge case), not just
+  verified it:** the busy-check `sendHeroToDungeon` used to gate
+  re-sends was time-based (`hero.busyUntil > now`), so the instant a
+  mission's nominal duration elapsed — even before
+  `resolveReadyDungeons()` ever ran — a hero looked "idle" and could
+  be sent on a brand-new mission. `sendHeroToDungeon` overwrites
+  `hero.dungeonTier` unconditionally, so the *original* still-
+  unresolved mission's reward became permanently unreachable: silent
+  data loss, not a crash. This directly contradicts design.md's own
+  wording — "can't be sent on a second mission until the first
+  **resolves**" (not "until the timer runs out"). Reproduced it first
+  with a throwaway script (funded resources, sent a hero, jumped `now`
+  to exactly `hero.busyUntil`, confirmed a second send succeeded and
+  silently clobbered `dungeonTier`) before touching any code, to make
+  sure it was real and not a misreading.
+
+  In practice this is masked in the shipped game: `main.js`'s `loop()`
+  calls `resolvePendingDungeons()` every single animation frame,
+  before any panel/button code runs, so `busyUntil` is nulled out
+  before a player could ever click "Send" in that exact window.
+  Fixed anyway rather than just documenting it: it's a small, well-
+  contained change, it's the literal regression tasks.md 3.3 asked to
+  be verified against, and relying on "the call order happens to save
+  us" as the only thing preventing silent reward loss is fragile
+  (breaks the moment any other caller — a test, a debug tool, a future
+  batch-processing path — sends without resolving first).
+
+  **The fix** separates two previously-conflated questions that had
+  been implemented with one function:
+  - "Is the mission timer still actively counting down?" (time-based,
+    `hero.busyUntil > now`) — kept as `isHeroBusy`, still used by
+    `resolveDungeon()`'s own "nothing to resolve yet" guard and by the
+    roster row's countdown display. Unchanged.
+  - "Can this hero be sent on a NEW mission?" (resolution-based,
+    `hero.busyUntil === null`) — `isHeroIdle` redefined around this;
+    no longer just `!isHeroBusy(hero, now)`. Kept the `(hero, now)`
+    signature (ignoring `now`) so existing call sites didn't need
+    touching. `dungeons.js`'s `canSendHeroToDungeon` switched from
+    checking `isHeroBusy` to checking `isHeroIdle`.
+  Verified the fix both ways: reran the original repro against the
+  fixed code (second send now correctly rejected, original mission's
+  `dungeonTier` survives, and resolving-then-resending still works
+  normally afterward); also temporarily reverted just the fix (not the
+  new tests) and confirmed the new regression tests fail against the
+  old code, then restored the fix and confirmed they pass — so the
+  tests are proven to actually catch this, not just exercise the
+  passing path.
+
+  **3.1 (recruit weighted-roll):** New `test/heroes.test.js`. Two
+  angles, not just one: (a) a *deterministic* test that mocks
+  `Math.random` to the exact cumulative-weight boundaries (0, 0.6-ε,
+  0.6, 0.9-ε, 0.9, 0.9999) and asserts the exact rarity `pickWeighted`
+  should land on at each — this pins down the boundary semantics
+  precisely (roll===60 belongs to the *next* bucket, not the one
+  ending there) rather than trusting a probabilistic test alone; (b) a
+  4000-sample statistical test with a generous tolerance band
+  confirming the roll isn't badly broken end-to-end through
+  `recruitHero`. Also covers: `RARITY_TABLE` weights/stats match
+  design.md exactly, `recruitHero` affordability gating, exact
+  `RECRUIT_COST` deduction, fresh-hero field shape, `effectivePower`
+  scaling (exact 2x at level 11, capped at `MAX_HERO_LEVEL` even if
+  `hero.level` somehow exceeds it), `grantXp` chaining/capping.
+
+  **3.2 (dungeon resolution math):** New `test/dungeons.test.js`.
+  Found real exact-equality boundary cases in the *existing* rarity/
+  tier numbers rather than needing synthetic mocks: rare Lv.1 has
+  `effectivePower` exactly 25, matching Medium's difficulty exactly;
+  rare Lv.9 is exactly 45, matching Hard's difficulty exactly. Both
+  confirmed as SUCCESS (the `>=` in `resolveDungeon` is correct, not
+  `>`), plus a one-level-down case confirmed as partial credit.
+  Verified partial-credit reward flooring per-resource (Hard tier: all
+  four reward values happen to be even, so also specifically checked
+  XP flooring using Medium's odd `fullXp: 25` → `floor(25/2) = 12`,
+  not 12 vs 13 ambiguity). Also covers: `DUNGEON_TIERS` matches
+  design.md exactly (all three tiers, every field), resolution clears
+  `busyUntil`/`dungeonTier`, XP grant actually feeds the leveling
+  path, `resolveReadyDungeons` batch/lazy behavior (resolves only
+  what's due, leaves mid-mission heroes untouched, handles
+  simultaneous resolutions).
+
+  **3.3 (busy-hero double-send):** See bug writeup above — the
+  regression test (`REGRESSION:` prefix in `dungeons.test.js`) is the
+  primary deliverable here, proven to fail-then-pass across the fix.
+
+  **3.4 (full verification standard):** `node --check` on all 22
+  `js/*.js` + both new `test/*.test.js` files — clean. Full import-
+  graph trace: ran `await import(...)` on every one of the 22
+  `js/*.js` files individually (not just ones reachable from
+  `main.js`), confirming every file's own imports link against real
+  exports across the whole graph; only expected failure was `main.js`
+  hitting `document is not defined` at its first DOM call, *after*
+  full graph linking succeeded — no stale-import regressions anywhere,
+  including in the new `heroes.js`/`dungeons.js` wiring. Full suite:
+  162/162 passing (123 pre-existing + 39 new from this session's two
+  test files), via `node --test test/*.test.js` directly (the literal
+  `npm test` script's `node --test test/` form is still the pre-
+  existing sandbox-only Node-version quirk noted in the 2026-07-21
+  Backend session — confirmed CI's real Actions runner is unaffected,
+  not re-verified again this session since it was already checked).
+
+  **3.5 (non-goals check):** Grepped every touched/new file for NFT/
+  wallet/mint/marketplace/blockchain/crypto/PvP/land-battle/sell-hero/
+  trade-hero/fusion language. Zero hits beyond `heroes.js`'s own
+  header comment explicitly *disclaiming* those things (documentation
+  reaffirming the boundary, not a violation) and unrelated `merge`/
+  `merged` hits in `gameState.js` that are save-migration object-
+  merging, nothing to do with hero fusion. Hero data model itself
+  (`id, name, rarity, level, xp, busyUntil, dungeonTier`) has no
+  ownership/price/wallet-address concept. Clean — nothing in this
+  change touches the non-goals list.
+
+  **Also wrote `test/heroes.test.js` and `test/dungeons.test.js`**
+  (tasks.md 4.1) as part of 3.1-3.3's "write/extend tests" instruction
+  — flagged in Active Tasks above so next session checks 4.1 off
+  rather than duplicating this work.
+
+  Files modified: `js/heroes.js`, `js/dungeons.js`,
+  `openspec/changes/add-heroes-dungeons/tasks.md`, `memory.md`. Files
+  added: `test/heroes.test.js`, `test/dungeons.test.js`.
+
+  **Not done (Documentation & Testing's remaining scope, 4.2-4.5):**
+  new specs (`hero-system`, `dungeon-system`), `world-map` spec
+  update, archiving `openspec/changes/add-heroes-dungeons/`. Also
+  still open: the `applyUpkeep`/rAF-timestamp bug flagged above (out
+  of scope for this ticket) and the still-not-actually-removed
+  `chicken-saga-village-doctest-session.patch` file.
 - **2026-07-21 (Frontend)**: Cloned fresh per explicit instruction
   (not reused local copy — confirmed HEAD was ahead of my last
   session's clone, so this mattered). Implemented Heroes + Dungeons

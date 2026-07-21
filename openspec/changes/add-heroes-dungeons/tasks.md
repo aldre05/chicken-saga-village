@@ -2,18 +2,18 @@
 
 ## Backend Engineer
 
-- [ ] 1.1 Create `heroes.js`: hero data model, rarity table, weighted
+- [x] 1.1 Create `heroes.js`: hero data model, rarity table, weighted
       recruit roll (reuse `luckyWheel.js`'s weighted-pick pattern —
       don't reimplement), `effectivePower()`, XP/leveling logic
-- [ ] 1.2 Create `dungeons.js`: tier config (table in design.md),
+- [x] 1.2 Create `dungeons.js`: tier config (table in design.md),
       `sendHeroToDungeon()`, `resolveDungeon()` (lazy resolution
       pattern, same as Lucky Wheel ticket accrual)
-- [ ] 1.3 Add Barracks + Dungeon Gate to `buildingUnlocks.js`
+- [x] 1.3 Add Barracks + Dungeon Gate to `buildingUnlocks.js`
       (`UNLOCK_CONFIG` entries per design.md costs)
-- [ ] 1.4 Add hero roster state (`gameState.heroes.roster`) to
+- [x] 1.4 Add hero roster state (`gameState.heroes.roster`) to
       `gameState.js` — `createGameState()`, `loadGameState()`
       (new saves only, no migration needed since this is new state)
-- [ ] 1.5 Add Barracks + Dungeon Gate handlers to
+- [x] 1.5 Add Barracks + Dungeon Gate handlers to
       `interactionHandlers.js` (unlock flow matches every other
       building — locked shows requirements, E-press shows info only,
       actual recruit/send actions are button-driven per the
@@ -21,17 +21,17 @@
 
 ## Frontend Engineer
 
-- [ ] 2.1 Add Barracks + Dungeon Gate to `map.js`, collision-verify
+- [x] 2.1 Add Barracks + Dungeon Gate to `map.js`, collision-verify
       (same script pattern used for every prior building — zero
       overlaps, nothing on solid tiles)
-- [ ] 2.2 Build a hero-roster panel (Barracks): shows recruit cost +
+- [x] 2.2 Build a hero-roster panel (Barracks): shows recruit cost +
       button, lists owned heroes with rarity/level/power/busy-status
-- [ ] 2.3 Build a dungeon-selection panel (Dungeon Gate): pick an idle
+- [x] 2.3 Build a dungeon-selection panel (Dungeon Gate): pick an idle
       hero + a tier, shows entry cost (red-highlighted if
       unaffordable, reuse `formatCostHTML`), Send button
-- [ ] 2.4 Show dungeon countdown (Xm Ys remaining) for a busy hero,
+- [x] 2.4 Show dungeon countdown (Xm Ys remaining) for a busy hero,
       same countdown-formatting pattern as the Lucky Wheel widget
-- [ ] 2.5 Floating popup + result display on dungeon resolution
+- [x] 2.5 Floating popup + result display on dungeon resolution
       (full-success vs partial-credit should look/read differently)
 
 ## Code Reviewer

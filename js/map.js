@@ -162,5 +162,24 @@ export const interactables = [
     col: 13, row: 9, tileWidth: 1, tileHeight: 1,
     color: '#c9a23b',
     dialogue: "Howdy! Nothing much to do around here yet, but stick around — big things comin'."
+  }),
+
+  // --- Heroes/Dungeons (add-heroes-dungeons) — placed just below
+  // Town Hall/Workbench, same "management cluster" reasoning design.md
+  // gives for Workbench: cols17-21/rows15-16 is open ground between
+  // the Town Hall footprint (rows12-14) and the map's bottom border
+  // (row19), clear of the vertical path (col15) and house_5
+  // (cols12-13, rows17-18).
+  makeInteractable({
+    id: 'barracks', name: 'Barracks',
+    col: 17, row: 15, tileWidth: 2, tileHeight: 2,
+    color: '#6a5a3a',
+    dialogue: "Recruits drilling in formation, ready to be sent on missions."
+  }),
+  makeInteractable({
+    id: 'dungeon_gate', name: 'Dungeon Gate',
+    col: 20, row: 15, tileWidth: 2, tileHeight: 2,
+    color: '#3a2a4a',
+    dialogue: "A stone archway humming with old magic. Something waits beyond it."
   })
 ];

@@ -19,6 +19,13 @@ import { RECIPES, getCraftableRecipes, craftSpecific } from './crafting.js';
 import {
   isLuckyWheelUnlocked, getTicketCap, syncTickets, spinWheel, getMsUntilNextTicket, REWARD_TABLE
 } from './luckyWheel.js';
+import {
+  canRecruitHero, recruitHero, effectivePower, isHeroBusy, isHeroIdle, getHeroById,
+  RECRUIT_COST
+} from './heroes.js';
+import {
+  DUNGEON_TIERS, DUNGEON_TIER_IDS, getDungeonTier, canSendHeroToDungeon, sendHeroToDungeon, resolveReadyDungeons
+} from './dungeons.js';
 
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
@@ -46,6 +53,22 @@ const upgradePreviewEl = document.getElementById('upgradePreview');
 const craftingPanelEl = document.getElementById('craftingPanel');
 const craftingRecipeListEl = document.getElementById('craftingRecipeList');
 
+const heroPanelEl = document.getElementById('heroPanel');
+const recruitBtn = document.getElementById('recruitBtn');
+const recruitCostEl = document.getElementById('recruitCost');
+const heroRosterListEl = document.getElementById('heroRosterList');
+
+const dungeonPanelEl = document.getElementById('dungeonPanel');
+const dungeonTierListEl = document.getElementById('dungeonTierList');
+const dungeonHeroListEl = document.getElementById('dungeonHeroList');
+const sendHeroBtn = document.getElementById('sendHeroBtn');
+const dungeonEntryCostEl = document.getElementById('dungeonEntryCost');
+
+// Static refs to the Barracks/Dungeon Gate world objects, used as the
+// anchor point for floating popups (recruit results, mission results).
+const barracksObj = interactables.find(o => o.id === 'barracks');
+const dungeonGateObj = interactables.find(o => o.id === 'dungeon_gate');
+
 const luckyWheelWidgetEl = document.getElementById('luckyWheelWidget');
 const luckyWheelTicketsEl = document.getElementById('luckyWheelTickets');
 const luckyWheelCountdownEl = document.getElementById('luckyWheelCountdown');
@@ -59,6 +82,12 @@ const wheelSpinBtn = document.getElementById('wheelSpinBtn');
 // Updated each frame by updateBuildingPanel() — buttons read this at
 // click time rather than needing to be recreated every frame.
 let currentTarget = null; // { kind: 'resource'|'house', resourceId?, buildingId, buildingObj }
+
+// Dungeon Gate panel picker state — which tier and which idle hero
+// are currently selected. Reset to a safe default each render if the
+// prior selection is no longer valid (hero got sent, tier unchanged).
+let selectedDungeonTierId = DUNGEON_TIER_IDS[0];
+let selectedHeroId = null;
 
 const AUTOSAVE_MS = 20000;
 
@@ -101,6 +130,12 @@ function formatCostHTML(costDict) {
     const cls = short ? 'cost-insufficient' : '';
     return `<span class="${cls}">${amt}${RESOURCE_CONFIG[id].icon}</span>`;
   }).join(' ');
+}
+
+// Plain-text version for floating popups (which use textContent, not
+// innerHTML) — e.g. dungeon mission rewards.
+function formatRewardText(rewardDict) {
+  return Object.entries(rewardDict).map(([id, amt]) => `+${amt}${RESOURCE_CONFIG[id].icon}`).join(' ');
 }
 
 updateResourceHud();
@@ -338,11 +373,15 @@ function updateLuckyWheelWidget() {
   luckyWheelCountdownEl.textContent = atCap ? 'Full!' : formatCountdown(msRemaining);
 }
 
-function formatCountdown(ms) {
+function formatDuration(ms) {
   const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  return `Next: ${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+  return `${minutes}m ${seconds.toString().padStart(2, '0')}s`;
+}
+
+function formatCountdown(ms) {
+  return `Next: ${formatDuration(ms)}`;
 }
 
 luckyWheelWidgetEl.addEventListener('click', () => {
@@ -420,6 +459,7 @@ function loop(now) {
   }
 
   applyUpkeep(gameState.upkeep, gameState.resources, gameState.workers, now);
+  resolvePendingDungeons();
 
   const center = getPlayerCenter(player);
   camera.follow(center.x, center.y);
@@ -477,6 +517,8 @@ function updatePromptUI(nearest) {
 
   updateBuildingPanel(nearest);
   updateCraftingPanel(nearest);
+  updateHeroPanel(nearest);
+  updateDungeonPanel(nearest);
 }
 
 function updateCraftingPanel(nearest) {
@@ -520,6 +562,163 @@ function updateCraftingPanel(nearest) {
   craftingPanelEl.classList.remove('hidden');
 }
 
+const HERO_RARITY_ICON = { common: '⚪', rare: '🔵', epic: '🟣' };
+
+function updateHeroPanel(nearest) {
+  const showPanel = nearest && nearest.id === 'barracks' && !dialogueState.open && isBuildingUnlocked(gameState.buildingUnlocks, 'barracks');
+
+  if (!showPanel) {
+    heroPanelEl.classList.add('hidden');
+    return;
+  }
+
+  const now = Date.now();
+
+  recruitCostEl.innerHTML = formatCostHTML(RECRUIT_COST);
+  recruitBtn.disabled = !canRecruitHero(gameState.resources);
+
+  heroRosterListEl.innerHTML = '';
+  if (gameState.heroes.roster.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'hero-roster-empty';
+    empty.textContent = 'No heroes yet — recruit your first one above.';
+    heroRosterListEl.appendChild(empty);
+  } else {
+    for (const hero of gameState.heroes.roster) {
+      const row = document.createElement('div');
+      row.className = 'hero-roster-row';
+
+      const power = Math.round(effectivePower(hero));
+      const info = document.createElement('div');
+      info.className = 'hero-roster-info';
+      info.innerHTML = `<span class="hero-roster-name">${HERO_RARITY_ICON[hero.rarity]} ${hero.name}</span>` +
+        `<span class="hero-roster-stats">Lv.${hero.level} · ⚔️${power} power</span>`;
+
+      const busy = isHeroBusy(hero, now);
+      const status = document.createElement('span');
+      status.className = busy ? 'hero-roster-status hero-status-busy' : 'hero-roster-status hero-status-idle';
+      status.textContent = busy ? `${formatDuration(hero.busyUntil - now)} left` : 'Idle';
+
+      row.appendChild(info);
+      row.appendChild(status);
+      heroRosterListEl.appendChild(row);
+    }
+  }
+
+  heroPanelEl.classList.remove('hidden');
+}
+
+recruitBtn.addEventListener('click', () => {
+  const hero = recruitHero(gameState.heroes, gameState.resources);
+  if (hero) {
+    const rarityLabel = hero.rarity.charAt(0).toUpperCase() + hero.rarity.slice(1);
+    spawnFloatingPopup(`Recruited ${rarityLabel} ${hero.name}! 🛡️`, barracksObj.x + barracksObj.width / 2, barracksObj.y);
+  } else {
+    spawnFloatingPopup("Can't afford it", barracksObj.x + barracksObj.width / 2, barracksObj.y);
+  }
+  updateResourceHud();
+});
+
+function updateDungeonPanel(nearest) {
+  const showPanel = nearest && nearest.id === 'dungeon_gate' && !dialogueState.open && isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate');
+
+  if (!showPanel) {
+    dungeonPanelEl.classList.add('hidden');
+    return;
+  }
+
+  const now = Date.now();
+
+  // --- Tier picker ---
+  dungeonTierListEl.innerHTML = '';
+  for (const tierId of DUNGEON_TIER_IDS) {
+    const tier = DUNGEON_TIERS[tierId];
+    const btn = document.createElement('button');
+    btn.className = 'dungeon-tier-btn' + (tierId === selectedDungeonTierId ? ' selected' : '');
+    btn.innerHTML = `${tier.label}<span class="dungeon-tier-meta">⚔️${tier.difficulty} needed</span>`;
+    btn.addEventListener('click', () => {
+      selectedDungeonTierId = tierId;
+      updateDungeonPanel(nearest);
+    });
+    dungeonTierListEl.appendChild(btn);
+  }
+
+  const selectedTier = getDungeonTier(selectedDungeonTierId);
+  dungeonEntryCostEl.innerHTML = formatCostHTML(selectedTier.entryCost);
+
+  // --- Idle hero picker --- (busy heroes can't be sent, so they're
+  // not offered here — the roster panel at the Barracks is where
+  // busy/idle status for every hero, not just idle ones, is visible)
+  const idleHeroes = gameState.heroes.roster.filter(h => isHeroIdle(h, now));
+  if (selectedHeroId && !idleHeroes.some(h => h.id === selectedHeroId)) selectedHeroId = null;
+  if (!selectedHeroId && idleHeroes.length > 0) selectedHeroId = idleHeroes[0].id;
+
+  dungeonHeroListEl.innerHTML = '';
+  if (gameState.heroes.roster.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dungeon-hero-empty';
+    empty.textContent = 'No heroes recruited — visit the Barracks first.';
+    dungeonHeroListEl.appendChild(empty);
+  } else if (idleHeroes.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'dungeon-hero-empty';
+    empty.textContent = 'All heroes are on a mission.';
+    dungeonHeroListEl.appendChild(empty);
+  } else {
+    for (const hero of idleHeroes) {
+      const power = Math.round(effectivePower(hero));
+      const btn = document.createElement('button');
+      btn.className = 'dungeon-hero-btn' + (hero.id === selectedHeroId ? ' selected' : '');
+      btn.innerHTML = `${hero.name}<span class="dungeon-hero-power">⚔️${power}</span>`;
+      btn.addEventListener('click', () => {
+        selectedHeroId = hero.id;
+        updateDungeonPanel(nearest);
+      });
+      dungeonHeroListEl.appendChild(btn);
+    }
+  }
+
+  const selectedHero = selectedHeroId ? getHeroById(gameState.heroes, selectedHeroId) : null;
+  sendHeroBtn.disabled = !canSendHeroToDungeon(selectedHero, selectedDungeonTierId, gameState.resources, now);
+
+  dungeonPanelEl.classList.remove('hidden');
+}
+
+sendHeroBtn.addEventListener('click', () => {
+  const now = Date.now();
+  const hero = selectedHeroId ? getHeroById(gameState.heroes, selectedHeroId) : null;
+  const tier = getDungeonTier(selectedDungeonTierId);
+  if (!hero || !tier) return;
+
+  const ok = sendHeroToDungeon(hero, selectedDungeonTierId, gameState.resources, now);
+  spawnFloatingPopup(
+    ok ? `${hero.name} sent to ${tier.label}! ⛩️` : "Can't send",
+    dungeonGateObj.x + dungeonGateObj.width / 2, dungeonGateObj.y
+  );
+  if (ok) selectedHeroId = null; // hero is now busy — clear so the next idle hero is auto-picked
+  updateResourceHud();
+});
+
+// Lazy dungeon resolution — same pattern as Lucky Wheel ticket
+// accrual (design.md): checked every frame rather than via a
+// background timer, so a mission resolves the moment its busyUntil
+// passes, with a floating popup at the Dungeon Gate. Runs regardless
+// of where the player currently is, same as ticket accrual.
+function resolvePendingDungeons() {
+  const now = Date.now();
+  const results = resolveReadyDungeons(gameState.heroes, gameState.resources, now);
+  if (results.length === 0) return;
+
+  const anchor = dungeonGateObj || barracksObj;
+  results.forEach((r, i) => {
+    const text = r.success
+      ? `✅ ${r.hero.name}: ${formatRewardText(r.reward)} +${r.xp}XP`
+      : `⚠️ ${r.hero.name}: partial credit ${formatRewardText(r.reward)} +${r.xp}XP`;
+    spawnFloatingPopup(text, anchor.x + anchor.width / 2, anchor.y - i * 18);
+  });
+  updateResourceHud();
+}
+
 function updateBuildingPanel(nearest) {
   if (!nearest || dialogueState.open) {
     panelEl.classList.add('hidden');
@@ -531,8 +730,10 @@ function updateBuildingPanel(nearest) {
   const isHouseBuilding = isHouse(nearest.id);
   const isTownHall = nearest.id === 'town_hall';
   const isWorkbench = nearest.id === 'workbench';
+  const isBarracks = nearest.id === 'barracks';
+  const isDungeonGate = nearest.id === 'dungeon_gate';
 
-  if (!resourceId && !isHouseBuilding && !isTownHall && !isWorkbench) {
+  if (!resourceId && !isHouseBuilding && !isTownHall && !isWorkbench && !isBarracks && !isDungeonGate) {
     panelEl.classList.add('hidden');
     currentTarget = null;
     return;
@@ -542,8 +743,9 @@ function updateBuildingPanel(nearest) {
   panelNameEl.textContent = nearest.name;
 
   // --- Locked: show requirements + an Unlock button, same pattern as
-  // upgrading. Applies to resource buildings, houses, and Workbench —
-  // Town Hall has no lock state, it's always available. ---
+  // upgrading. Applies to resource buildings, houses, Workbench,
+  // Barracks, and Dungeon Gate — Town Hall has no lock state, it's
+  // always available. ---
   if (!isTownHall && !isBuildingUnlocked(gameState.buildingUnlocks, buildingId)) {
     currentTarget = { kind: 'locked', buildingId, buildingObj: nearest };
 
@@ -595,6 +797,16 @@ function updateBuildingPanel(nearest) {
   if (isWorkbench) {
     // Unlocked Workbench doesn't use this panel at all — the crafting
     // panel (updateCraftingPanel) handles it entirely.
+    panelEl.classList.add('hidden');
+    currentTarget = null;
+    return;
+  }
+
+  if (isBarracks || isDungeonGate) {
+    // Unlocked Barracks/Dungeon Gate don't use this panel at all — the
+    // hero roster panel (updateHeroPanel) / dungeon panel
+    // (updateDungeonPanel) handle them entirely, same pattern as
+    // Workbench + the crafting panel above.
     panelEl.classList.add('hidden');
     currentTarget = null;
     return;

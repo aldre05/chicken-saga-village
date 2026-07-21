@@ -106,12 +106,29 @@ export function xpForNextLevel(level) {
   return level * 20;
 }
 
+// Time-based: is the mission's timer still actively counting down?
+// Used by dungeons.js's resolveDungeon() to know when a mission is
+// actually due, and for countdown display. NOT the right check for
+// "can this hero be sent on a new mission" -- see isHeroIdle below.
 export function isHeroBusy(hero, now) {
   return !!hero.busyUntil && hero.busyUntil > now;
 }
 
-export function isHeroIdle(hero, now) {
-  return !isHeroBusy(hero, now);
+// Resolution-based: can this hero be sent on a NEW mission? A hero
+// stays unavailable until its current mission is actually resolved
+// (busyUntil cleared to null by dungeons.js's resolveDungeon), not
+// merely once the timer's nominal duration has elapsed -- see
+// design.md: "can't be sent on a second mission until the first
+// resolves" (not "until the timer runs out"). Deliberately does NOT
+// take `now`/compare against a timestamp: using isHeroBusy's time
+// comparison here would let a hero be re-sent in the window between
+// its timer expiring and lazy resolution running, silently
+// discarding the pending mission's reward, since sendHeroToDungeon
+// overwrites dungeonTier unconditionally. (The `now` param is kept,
+// unused, so existing `isHeroIdle(hero, now)` call sites don't need
+// to change.)
+export function isHeroIdle(hero, _now) {
+  return hero.busyUntil === null || hero.busyUntil === undefined;
 }
 
 export function getHeroById(rosterState, heroId) {

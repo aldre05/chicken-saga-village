@@ -4,7 +4,7 @@
 // interacts with a hero/the Dungeon Gate, same pattern as Lucky
 // Wheel ticket accrual, not a background timer (see design.md).
 
-import { effectivePower, isHeroBusy, grantXp } from './heroes.js';
+import { effectivePower, isHeroBusy, isHeroIdle, grantXp } from './heroes.js';
 import { canAfford, spendResources } from './resources.js';
 
 // Tier config per design.md. durationMs uses real-world minutes, same
@@ -39,7 +39,7 @@ export function getDungeonTier(tierId) {
 export function canSendHeroToDungeon(hero, tierId, resourceState, now) {
   const tier = getDungeonTier(tierId);
   if (!hero || !tier) return false;
-  if (isHeroBusy(hero, now)) return false;
+  if (!isHeroIdle(hero, now)) return false;
   return canAfford(resourceState, tier.entryCost);
 }
 

@@ -36,17 +36,17 @@
 
 ## Code Reviewer
 
-- [ ] 3.1 Verify recruit weighted-roll matches the rarity table
+- [x] 3.1 Verify recruit weighted-roll matches the rarity table
       exactly (write/extend tests — this project keeps persistent
       tests in `test/`, not throwaway scripts, per standing decision)
-- [ ] 3.2 Verify dungeon resolution math: full reward at power ≥
+- [x] 3.2 Verify dungeon resolution math: full reward at power ≥
       difficulty, exactly 50% (floored) below it — test boundary case
       (power == difficulty exactly)
-- [ ] 3.3 Verify a busy hero genuinely can't be double-sent, including
+- [x] 3.3 Verify a busy hero genuinely can't be double-sent, including
       an edge case: sending right as `busyUntil` passes
-- [ ] 3.4 Full project verification standard: syntax check, full
+- [x] 3.4 Full project verification standard: syntax check, full
       import-graph trace, `npm test` all passing before sign-off
-- [ ] 3.5 Confirm this change didn't touch anything in the
+- [x] 3.5 Confirm this change didn't touch anything in the
       NFT/monetization non-goals list — flag immediately if it did
 
 ## Documentation & Testing

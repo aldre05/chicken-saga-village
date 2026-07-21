@@ -634,3 +634,33 @@ application), not meant to live in the repo.
   `sendHeroToDungeon`, `canSendHeroToDungeon`, `resolveReadyDungeons`,
   `DUNGEON_TIERS`). Also still pending: remove the stray
   `chicken-saga-village-doctest-session.patch` file (see above).
+
+  **Required reading before starting tasks 2.1-2.5 (Frontend
+  Engineer) — read the actual files, not just this summary:**
+  - `js/luckyWheel.js` — tasks.md 1.1 and 1.2 both say "reuse this
+    pattern, don't reimplement" for the weighted-pick/lazy-resolution
+    mechanics. That's not a suggestion to skim; the file is short and
+    the two things worth actually reading closely are (1) the
+    exported `pickWeighted(entries, weightKey)` helper — the same
+    function `heroes.js` now imports for the recruit roll, so any
+    frontend weighted-display logic (e.g. showing rarity odds) should
+    read the same `RARITY_TABLE`/`weight` shape rather than
+    inventing a second convention — and (2) `syncTickets()` /
+    `getMsUntilNextTicket()`, which is the lazy "resolve on next
+    interaction, checkpoint by elapsed ms" pattern that
+    `dungeons.js`'s `resolveDungeon()`/`resolveReadyDungeons()` also
+    follows and that the countdown display (task 2.4) needs to mirror
+    for the "Xm Ys remaining" formatting to feel consistent with the
+    Lucky Wheel widget already on screen.
+  - `js/buildingUnlocks.js` and `js/gameState.js` — these are the
+    templates for how *every* prior building/state addition in this
+    project has been structured, and the Barracks/Dungeon Gate
+    additions this session followed them exactly: `buildingUnlocks.js`
+    is the single source of truth for unlock cost/Town-Hall-gate
+    (`UNLOCK_CONFIG`), and `gameState.js` is where new state gets
+    composed into `createGameState()`/`loadGameState()` (see the
+    `heroes: createHeroRosterState()` entries added this session for
+    the exact shape to copy from if any future state needs adding).
+    Any new building or persisted state should be added the same way
+    — don't invent a parallel pattern for unlock config or state
+    composition.

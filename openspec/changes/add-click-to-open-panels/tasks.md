@@ -4,6 +4,12 @@
 - [ ] 1.1 No backend logic changes expected — this is purely an
       interaction-trigger change. Confirm with Frontend once their
       work lands; pick up only if a data-layer gap surfaces.
+      (Checked in 2026-07-22: read proposal/design/tasks in full,
+      confirmed it's a main.js input/rendering change reusing
+      existing data-layer reads unchanged. Frontend's 2.1-2.6 haven't
+      landed yet, so there's nothing to check for a gap against —
+      leaving unchecked, not claiming this is done, until that work
+      exists.)
 
 ## Frontend Engineer
 - [ ] 2.1 Add canvas click listener + world-coordinate translation +

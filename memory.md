@@ -1138,3 +1138,125 @@ application), not meant to live in the repo.
   into `effectivePower()`, equip/unequip functions, 5 new crafting
   recipes. Should build on top of the `currentHp`/`isDowned` fields
   added this session without disturbing them.
+- **2026-07-22 (Backend Engineer — Hero Classes + Equipment, tasks
+  1.1-1.5)**: Third and last of the three-proposal sequence.
+  Implemented all 5 tasks in
+  `openspec/changes/add-hero-classes/tasks.md` against design.md:
+  - `heroes.js`: `HERO_CLASSES`/`HERO_CLASS_IDS`, random `class`
+    assignment at recruit (uniform, unlike rarity's weighting, per
+    design.md); `equipment: {weapon:null, armor:null, boots:null}`
+    added to hero creation; `EQUIPMENT_ITEMS` (slot + classRestriction
+    + power per item) as the source of truth, with `EQUIPMENT_POWER`
+    exported as a derived flat map so it matches design.md's
+    `effectivePower()` snippet by name exactly; `effectivePower()`
+    updated to add the flat sum of equipped items' power on top of
+    the existing level-scaled base (equipment doesn't scale with
+    level); `canEquipItem`/`equipHero`/`unequipHero` — validates item
+    exists, hero has it in inventory, and class restriction (weapon
+    slots only) before allowing equip; swap returns the previously
+    equipped item to inventory rather than destroying it; unequip
+    also returns to inventory and no-ops safely on an empty slot.
+  **Found and fixed a real structural gap (not just missing config)
+  before it could ship broken:** design.md's Boots recipe cost is
+  `{plank: 3, feathers: 5}` — but `plank` is a *crafted inventory
+  item* (from crafting.js's own `plank` recipe), not a raw resource
+  in `resources.js`'s `RESOURCE_CONFIG`. `crafting.js`'s
+  `canAfford`/`spendResources` (imported from resources.js) only ever
+  check/spend `resourceState.carried`, which has no concept of
+  `plank`. Added literally as originally structured, Boots would have
+  been **permanently uncraftable** (`resourceState.carried.plank` is
+  always `undefined`) — directly defeating this whole change's
+  stated goal ("give refined goods a purpose"). Fixed by extending
+  `crafting.js` itself: `splitCost()` routes each cost-dict key to
+  either the raw-resource pool or the inventory-item pool (a key is a
+  raw resource iff it's in `RESOURCE_IDS`), and
+  `canAffordRecipe()`/`craftSpecific()`/`getCraftableRecipes()` check
+  and spend from both pools together. Every existing resource-only
+  recipe is completely unaffected (empty item-cost pool is always
+  vacuously affordable). `getCraftableRecipes()`'s signature changed
+  to take `inventoryState` as well — required a matching one-line
+  call-site update in `main.js` (line ~545), which is nominally
+  Frontend Engineer's file; made it anyway since without it the call
+  would throw for every recipe, not just Boots (same precedent as
+  the earlier `getUpgradeCost` call-site updates).
+  **Also caught and fixed a persistence gap:** heroes recruited
+  before `currentHp` (add-dungeon-failure) or `class`/`equipment`
+  (this change) existed would load from a legacy save missing those
+  fields entirely — `gameState.js`'s heroes merge takes the saved
+  roster array wholesale with no per-hero shape check. Added a
+  per-hero backfill loop in `loadGameState()` (same file/style as the
+  existing `migrateOldResourceShape` and grain→rice migrations):
+  missing `currentHp` → full HP for rarity (not 0 — no recorded HP
+  means it predates HP existing, not that the hero was downed);
+  missing `class` → assigned randomly, same as at recruitment;
+  missing `equipment` → empty slots.
+  **Verification:** `node --check` on all 4 touched files. Full
+  suite: 162/165 (3 failures — the pre-existing 2 partial-credit
+  tests from last session, plus 1 new: `crafting.test.js`'s "every
+  recipe cost only references known resources" now correctly fails
+  because Boots' `plank` cost is intentionally not a raw resource;
+  *expected* fallout from implementing design.md as specified, not a
+  regression — updating it is Documentation & Testing's task 4.1).
+  Functional simulation (thrown away after use) covered: 200 recruits
+  all get a valid class from all 3 classes and start with empty
+  equipment; Boots genuinely uncraftable with 0 plank even given
+  unlimited raw resources, becomes craftable after crafting exactly 3
+  plank, and consumes the plank + feathers correctly on craft; all 6
+  new recipes match design.md's costs exactly; all 3 class/weapon
+  mismatches rejected (not just one, per Code Reviewer's task 3.1
+  concern) while same-class equip succeeds; multi-slot power
+  summation verified exact (sword+armor+boots all stack); swap
+  returns the old item to inventory, not destroyed; unequip returns
+  the item and safely no-ops on an already-empty slot. Separately
+  simulated `loadGameState()` against a hand-built legacy save object
+  missing currentHp/class/equipment — backfill confirmed correct
+  (valid HP, not downed, valid class, empty equipment) rather than
+  crashing or leaving fields `undefined`.
+  **Not done (out of scope for Backend Engineer):** roster panel
+  class/equipment display, equip-slot picker UI, Workbench recipe
+  rows for the new items, Heal Potion consumable-use UI (Frontend
+  Engineer 2.1-2.4 — note Heal Potion's *application* logic, i.e. an
+  actual "restore 25% max HP to a chosen hero" function, isn't listed
+  under either role in tasks.md; flagging this now rather than
+  inventing scope — `getMaxHp(hero)` is already exported and the
+  formula is trivial, `Math.min(getMaxHp(hero), hero.currentHp +
+  Math.ceil(getMaxHp(hero) * 0.25))`, but nobody's been assigned to
+  write it as a real function yet); class-mismatch/swap/multi-slot
+  sign-off, standard verification (Code Reviewer 3.1-3.4); new
+  heroes.js test cases, spec updates for hero-system and
+  crafting-system (resolving the "refined goods have no use" open
+  question explicitly), memory.md Completed Tasks entry (Documentation
+  & Testing 4.1-4.3 — again, this entry is my own backend log, not
+  that deliverable).
+  Files modified: `js/heroes.js`, `js/crafting.js`, `js/gameState.js`,
+  `js/main.js`.
+  **Next backend task:** none queued — all three proposals in the
+  requested implementation order (th10-houses → dungeon-failure →
+  hero-classes) are now backend-complete. add-click-to-open-panels
+  is the 4th pending proposal but its tasks.md explicitly has no
+  proactive Backend Engineer work ("pick up only if a data-layer gap
+  surfaces" during Frontend's UI work) — nothing to do there yet.
+- **2026-07-22 (Backend Engineer — Click-to-Open Panels check-in)**:
+  Read proposal.md/design.md/tasks.md in full per task 1.1's own
+  instruction ("confirm with Frontend once their work lands; pick up
+  only if a data-layer gap surfaces"). This change is purely
+  `main.js` input/rendering: canvas click listener + world-coordinate
+  hit-testing, a `selectedBuildingId` state variable, and switching
+  every panel-update function's trigger condition from `nearest` to
+  `selectedBuildingId`. It reuses the existing data-layer read paths
+  (`HANDLERS[id].interact(gameState)` from `interactionHandlers.js`,
+  `getHouseCapacity`, `canSendHeroToDungeon`, etc.) completely
+  unchanged — switching *when* a panel queries that data doesn't
+  change *what* it needs. No code changes made. Frontend Engineer's
+  tasks 2.1-2.6 haven't landed yet in this repo, so there's nothing
+  to check for a surfaced gap against yet — will revisit once that
+  work exists rather than speculating now.
+  **Next backend task:** none queued. All three prioritized
+  proposals (th10-houses, dungeon-failure, hero-classes) are backend-
+  complete; add-click-to-open-panels needs no backend action until
+  Frontend's work lands and reveals (or doesn't) a gap. Also still
+  outstanding from 2026-07-21: the stray
+  `chicken-saga-village-doctest-session.patch` file at the repo root
+  was logged as removed once already but that removal never actually
+  reached `origin/main` — still there as of this session, still
+  unaddressed.

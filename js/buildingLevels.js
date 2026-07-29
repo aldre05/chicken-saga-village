@@ -15,7 +15,7 @@ export const MAX_WORKER_SLOTS = 50;
 export const UPGRADE_COST_GROWTH = 1.3;
 
 export const RESOURCE_BUILDINGS = ['old_coop', 'nest_bundle', 'woodshed', 'rice_paddy', 'quarry', 'mine'];
-export const HOUSE_IDS = ['house_1', 'house_2', 'house_3', 'house_4', 'house_5'];
+export const HOUSE_IDS = ['house_1', 'house_2', 'house_3', 'house_4', 'house_5', 'house_6', 'house_7', 'house_8', 'house_9', 'house_10'];
 export const LEVELABLE_BUILDINGS = [...RESOURCE_BUILDINGS, ...HOUSE_IDS];
 
 export const BASE_UPGRADE_COST = {
@@ -29,7 +29,12 @@ export const BASE_UPGRADE_COST = {
   house_2: { egg: 15, feathers: 10 },
   house_3: { egg: 15, feathers: 10 },
   house_4: { egg: 15, feathers: 10 },
-  house_5: { egg: 15, feathers: 10 }
+  house_5: { egg: 15, feathers: 10 },
+  house_6: { egg: 15, feathers: 10 },
+  house_7: { egg: 15, feathers: 10 },
+  house_8: { egg: 15, feathers: 10 },
+  house_9: { egg: 15, feathers: 10 },
+  house_10: { egg: 15, feathers: 10 }
 };
 
 // House-specific: capacity per level, capped at 15 workers/house.

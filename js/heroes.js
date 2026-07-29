@@ -11,6 +11,13 @@ import { pickWeighted } from './luckyWheel.js';
 export const RECRUIT_COST = { egg: 15, feathers: 20 };
 export const MAX_HERO_LEVEL = 20;
 
+// Healing cost scales with rarity investment — a downed epic hero
+// costs proportionally more to bring back than a downed common one.
+// See openspec/changes/add-dungeon-failure/design.md; multipliers are
+// a first guess flagged there for playtesting.
+export const HEAL_COST_BASE = { egg: 30, feathers: 20 };
+export const HEAL_COST_RARITY_MULTIPLIER = { common: 1, rare: 2, epic: 4 };
+
 // Fixed (non-randomized) base stats per rarity — keeps balance simple
 // and predictable for v1 (see design.md). power = attack + defense +
 // floor(hp / 5), one transparent number used for dungeon resolution.
@@ -88,7 +95,8 @@ export function recruitHero(rosterState, resourceState) {
     level: 1,
     xp: 0,
     busyUntil: null,
-    dungeonTier: null
+    dungeonTier: null,
+    currentHp: RARITY_BY_ID[picked.rarity].hp
   };
   rosterState.roster.push(hero);
   return hero;
@@ -133,6 +141,48 @@ export function isHeroIdle(hero, _now) {
 
 export function getHeroById(rosterState, heroId) {
   return rosterState.roster.find(h => h.id === heroId) || null;
+}
+
+// Max HP for a hero is fixed by rarity (not level — leveling scales
+// power via effectivePower, not HP; see design.md, which only lists
+// currentHp as varying). Used both to initialize a new hero and to
+// know what heal restores to.
+export function getMaxHp(hero) {
+  return RARITY_BY_ID[hero.rarity].hp;
+}
+
+// A downed hero (currentHp <= 0, set by dungeons.js's resolveDungeon
+// on failure) can't be sent on a new mission until healed — see
+// dungeons.js's canSendHeroToDungeon, which checks this alongside
+// isHeroIdle. Deliberately a separate check from isHeroIdle: a hero
+// can be idle (not currently on a mission) AND downed at the same
+// time, and those are different reasons a Send action is disabled.
+export function isDowned(hero) {
+  return hero.currentHp <= 0;
+}
+
+// Heal cost scales with rarity investment (see HEAL_COST_RARITY_MULTIPLIER
+// above) so a downed epic hero costs proportionally more to recover
+// than a downed common one.
+export function getHealCost(hero) {
+  const mult = HEAL_COST_RARITY_MULTIPLIER[hero.rarity];
+  return {
+    egg: HEAL_COST_BASE.egg * mult,
+    feathers: HEAL_COST_BASE.feathers * mult
+  };
+}
+
+export function canHealHero(hero, resourceState) {
+  return isDowned(hero) && canAfford(resourceState, getHealCost(hero));
+}
+
+// Restores currentHp to max. Returns true if the heal happened, false
+// if the hero wasn't actually downed or the cost was unaffordable.
+export function healHero(hero, resourceState) {
+  if (!canHealHero(hero, resourceState)) return false;
+  spendResources(resourceState, getHealCost(hero));
+  hero.currentHp = getMaxHp(hero);
+  return true;
 }
 
 // Adds XP and applies any level-ups that cross a threshold. Uncapped

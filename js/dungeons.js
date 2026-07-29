@@ -4,7 +4,7 @@
 // interacts with a hero/the Dungeon Gate, same pattern as Lucky
 // Wheel ticket accrual, not a background timer (see design.md).
 
-import { effectivePower, isHeroBusy, isHeroIdle, grantXp } from './heroes.js';
+import { effectivePower, isHeroBusy, isHeroIdle, isDowned, grantXp } from './heroes.js';
 import { canAfford, spendResources } from './resources.js';
 
 // Tier config per design.md. durationMs uses real-world minutes, same
@@ -40,6 +40,7 @@ export function canSendHeroToDungeon(hero, tierId, resourceState, now) {
   const tier = getDungeonTier(tierId);
   if (!hero || !tier) return false;
   if (!isHeroIdle(hero, now)) return false;
+  if (isDowned(hero)) return false;
   return canAfford(resourceState, tier.entryCost);
 }
 
@@ -56,22 +57,17 @@ export function sendHeroToDungeon(hero, tierId, resourceState, now) {
   return true;
 }
 
-function floorRewardHalf(rewardDict) {
-  const halved = {};
-  for (const [id, amount] of Object.entries(rewardDict)) {
-    halved[id] = Math.floor(amount / 2);
-  }
-  return halved;
-}
-
 // Resolves a single hero's mission once busyUntil has passed.
 // Deterministic: effectivePower >= tier.difficulty gives full reward
-// + full XP; otherwise 50% reward (floored) + 50% XP — a partial-
-// credit outcome rather than a full loss, matching this project's
-// established preference for not punishing failure states (see
-// design.md). Returns null if there's nothing to resolve (no hero,
-// hero was never sent, or still busy). Clears busy state on
-// resolution so the hero becomes sendable again.
+// + full XP. On failure the hero is downed (currentHp set to 0,
+// nothing awarded) rather than the old 50%-reward/50%-XP partial
+// credit — real risk on failure, without permanent loss, since a
+// downed hero can be healed (see heroes.js's healHero) rather than
+// lost outright. See openspec/changes/add-dungeon-failure/design.md;
+// this replaces this project's original softer failure handling.
+// Returns null if there's nothing to resolve (no hero, hero was
+// never sent, or still busy). Clears busy state on resolution so the
+// hero becomes sendable again (once healed, if it was downed).
 export function resolveDungeon(hero, resourceState, now) {
   if (!hero || !hero.dungeonTier) return null;
   if (isHeroBusy(hero, now)) return null;
@@ -82,8 +78,14 @@ export function resolveDungeon(hero, resourceState, now) {
   if (!tier) return null; // defensive: unknown/removed tier id, nothing to award
 
   const success = effectivePower(hero) >= tier.difficulty;
-  const reward = success ? tier.fullReward : floorRewardHalf(tier.fullReward);
-  const xp = success ? tier.fullXp : Math.floor(tier.fullXp / 2);
+
+  if (!success) {
+    hero.currentHp = 0;
+    return { success: false, reward: {}, xp: 0 };
+  }
+
+  const reward = tier.fullReward;
+  const xp = tier.fullXp;
 
   for (const [id, amount] of Object.entries(reward)) {
     resourceState.carried[id] = (resourceState.carried[id] || 0) + amount;

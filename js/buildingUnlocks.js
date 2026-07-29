@@ -17,6 +17,11 @@ export const UNLOCK_CONFIG = {
   house_3:     { requiresTownHall: 3, cost: { egg: 40, feathers: 25 } },
   house_4:     { requiresTownHall: 4, cost: { egg: 70, feathers: 45 } },
   house_5:     { requiresTownHall: 5, cost: { egg: 110, feathers: 70 } },
+  house_6:  { requiresTownHall: 6,  cost: { egg: 150, feathers: 100 } },
+  house_7:  { requiresTownHall: 7,  cost: { egg: 220, feathers: 150 } },
+  house_8:  { requiresTownHall: 8,  cost: { egg: 320, feathers: 220 } },
+  house_9:  { requiresTownHall: 9,  cost: { egg: 450, feathers: 300 } },
+  house_10: { requiresTownHall: 10, cost: { egg: 600, feathers: 420 } },
   barracks:     { requiresTownHall: 3, cost: { egg: 50, feathers: 30 } },
   dungeon_gate: { requiresTownHall: 4, cost: { egg: 80, feathers: 50 } }
 };

@@ -12,7 +12,7 @@ import { getIdleWorkers } from './workers.js';
 import { UNLOCK_CONFIG, isBuildingUnlocked, meetsTownHallRequirement } from './buildingUnlocks.js';
 import { getMaxWorkers, getRateMultiplier, getCapMultiplier, getHouseCapacity, isHouseMaxed, HOUSE_IDS } from './buildingLevels.js';
 import { getReadyToClaimQuests, getAvailableQuests, claimQuest } from './questBoard.js';
-import { isHeroIdle } from './heroes.js';
+import { isHeroIdle, isDowned, getHeroById, healHero, getHealCost } from './heroes.js';
 import { resolveReadyDungeons } from './dungeons.js';
 
 // Maps a resource-producing building's id to which resource it produces.
@@ -27,7 +27,9 @@ export const BUILDING_RESOURCE = {
 
 const HOUSE_DISPLAY_NAME = {
   house_1: 'House 1', house_2: 'House 2', house_3: 'House 3',
-  house_4: 'House 4', house_5: 'House 5'
+  house_4: 'House 4', house_5: 'House 5', house_6: 'House 6',
+  house_7: 'House 7', house_8: 'House 8', house_9: 'House 9',
+  house_10: 'House 10'
 };
 
 function formatCost(costDict) {
@@ -186,12 +188,36 @@ export const HANDLERS = {
       }
 
       const count = gameState.heroes.roster.length;
+      if (count === 0) {
+        return { title: 'Barracks', text: 'No heroes recruited yet. Use the panel below to recruit one.' };
+      }
+
+      const downedCount = gameState.heroes.roster.filter(isDowned).length;
+      const downedText = downedCount > 0
+        ? ` ${downedCount} downed and need healing before they can go on another mission.`
+        : '';
       return {
         title: 'Barracks',
-        text: count === 0
-          ? 'No heroes recruited yet. Use the panel below to recruit one.'
-          : `${count} hero${count === 1 ? '' : 'es'} recruited. Use the panel below to recruit more or manage your roster.`
+        text: `${count} hero${count === 1 ? '' : 'es'} recruited.${downedText} Use the panel below to recruit more or manage your roster.`
       };
+    },
+
+    // Heals one downed hero back to full HP. Returns
+    // { healed: boolean, cost? } rather than a display string, since
+    // (per this project's convention — see recruitHero/sendHeroToDungeon
+    // being wired directly by main.js's buttons rather than through
+    // this file) the actual heal button lives in the roster panel, not
+    // the E-key dialogue; this is the data-layer action for that
+    // button to call, kept here rather than in heroes.js directly
+    // since it's specifically the Barracks' UI-facing action per
+    // tasks.md 1.5 (heroes.js's healHero/getHealCost/canHealHero
+    // remain the underlying reusable logic).
+    heal(gameState, heroId) {
+      const hero = getHeroById(gameState.heroes, heroId);
+      if (!hero) return { healed: false };
+      const cost = getHealCost(hero);
+      const healed = healHero(hero, gameState.resources);
+      return { healed, cost };
     }
   },
 

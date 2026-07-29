@@ -1,15 +1,21 @@
 # Tasks: Hero Classes + Equipment
 
 ## Backend Engineer
-- [ ] 1.1 Add `class` field + random assignment to hero creation
+- [x] 1.1 Add `class` field + random assignment to hero creation
       (heroes.js)
-- [ ] 1.2 Add `equipment` field (weapon/armor/boots, all null) to
+- [x] 1.2 Add `equipment` field (weapon/armor/boots, all null) to
       hero creation
-- [ ] 1.3 Add `EQUIPMENT_POWER` config + update `effectivePower()` to
+- [x] 1.3 Add `EQUIPMENT_POWER` config + update `effectivePower()` to
       include equipment bonus
-- [ ] 1.4 Add 5 new equipment recipes + Heal Potion to crafting.js's
+- [x] 1.4 Add 5 new equipment recipes + Heal Potion to crafting.js's
       RECIPES, per design.md's table exactly
-- [ ] 1.5 Add equip/unequip functions (validate slot + class
+      (Required extending crafting.js's cost-checking itself: Boots'
+      `plank` cost is an inventory item, not a raw resource, and the
+      old canAfford/spendResources only checked raw resources — see
+      memory.md 2026-07-22 entry. Also breaks 1 pre-existing
+      crafting.test.js invariant test as expected fallout, left for
+      Documentation & Testing's 4.1.)
+- [x] 1.5 Add equip/unequip functions (validate slot + class
       restriction before allowing equip, return old item to inventory
       on swap)
 

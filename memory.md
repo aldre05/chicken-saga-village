@@ -1011,3 +1011,130 @@ application), not meant to live in the repo.
   that's found it so far. Otherwise: real in-browser playtest of
   Heroes + Dungeons (Active Task #2), still nobody's actually clicked
   through it live.
+- **2026-07-22 (Backend Engineer — TH10/10-Houses, tasks 1.1-1.4)**:
+  Fresh clone confirmed live state (repeating this every session per
+  standing instruction, not because it's shown signs of being
+  necessary again yet). Four proposals now pending in
+  `openspec/changes/`; user chose implementation order
+  th10-houses → dungeon-failure → hero-classes specifically to avoid
+  add-hero-classes and add-dungeon-failure both editing
+  `heroes.js`/`dungeons.js` blind in the same pass — this session
+  only did th10-houses, self-contained, no overlap.
+  Implemented 1.1-1.3 per design.md exactly: `townHall.js`
+  (`MAX_TOWN_HALL_LEVEL` 5→10, `UPGRADE_COSTS` extended to key 9);
+  `buildingLevels.js` (`HOUSE_IDS` extended to house_10); 
+  `buildingUnlocks.js` (`UNLOCK_CONFIG` house_6-10 entries).
+  **Task 1.4 ("verify, don't assume downstream code needs zero
+  changes") caught two real gaps design.md's claim missed:**
+  1. `BASE_UPGRADE_COST` in `buildingLevels.js` is keyed by
+     buildingId directly, not derived from `HOUSE_IDS` — house_6-10
+     had no entries, so `getUpgradeCost('house_6', ...)` would have
+     thrown (`Object.entries(undefined)`) the first time a player
+     tried to upgrade any new house. Fixed by adding house_6-10 with
+     the same `{egg:15, feathers:10}` cost every existing house uses
+     (all houses have always shared one cost regardless of number,
+     consistent with the universal capacity formula).
+  2. `HOUSE_DISPLAY_NAME` in `interactionHandlers.js` (feeds the
+     panel title in `makeHouseHandler`) also stopped at house_5 — new
+     houses would have shown a literal `"undefined (Lvl 1)"` panel
+     title. Fixed with the obvious `'House 6'`..`'House 10'` entries.
+  Confirmed via grep that every other `HOUSE_IDS` consumer (worker
+  cap sum in `main.js`/`workers.js`, house-migration logic in
+  `gameState.js`, `isHouse()`) is genuinely generic and needed no
+  changes — the design doc's claim held for those, just not the two
+  above.
+  **Verification:** `node --check` on all 4 touched files; full suite
+  still 165/165 (no test files touched — that's Documentation &
+  Testing's task 4.3). Functional simulation (thrown away after use):
+  confirmed Town Hall upgrades cleanly from 1→10 and refuses to go
+  past 10; confirmed every house_6-10 has working unlock config,
+  upgrade cost (no throw), and a panel handler with a real title (not
+  "undefined"); confirmed per-house capacity formula is unchanged
+  (3→15 per house, independent of house count) and total max
+  population across all 10 maxed houses is exactly 150 as design.md
+  specifies.
+  **Not done (out of scope for Backend Engineer):** map.js placement
+  + collision verification, HUD population display (Frontend Engineer
+  2.1-2.3); house_6 TH-gate/level-10-hard-cap verification, standard
+  syntax/import/test verification sign-off (Code Reviewer 3.1-3.3);
+  spec updates, world-map building count, new tests, memory.md
+  Completed Tasks entry (Documentation & Testing 4.1-4.4 — this
+  session's memory.md entry is my own backend log, not that task).
+  Files modified: `js/townHall.js`, `js/buildingLevels.js`,
+  `js/buildingUnlocks.js`, `js/interactionHandlers.js`.
+  **Next backend task:** per the requested order, add-dungeon-failure
+  next (currentHp/heal/isDowned in heroes.js, resolveDungeon()
+  rewrite in dungeons.js), then add-hero-classes last — deliberately
+  sequenced that way since both touch heroes.js/dungeons.js and
+  hero-classes' effectivePower() equipment-bonus work should land
+  after dungeon-failure's HP-related hero-object changes are settled,
+  not interleaved.
+- **2026-07-22 (Backend Engineer — Dungeon Failure, tasks 1.1-1.5)**:
+  Second of the three-proposal sequence (th10-houses done above;
+  hero-classes still last, deliberately, so its effectivePower()/
+  equipment work lands on top of these settled HP fields rather than
+  interleaved). Implemented all 5 tasks in
+  `openspec/changes/add-dungeon-failure/tasks.md` against design.md:
+  - `heroes.js`: `currentHp` added to hero creation (inits to
+    rarity's max HP via existing `RARITY_BY_ID` lookup); new
+    `getMaxHp(hero)`, `isDowned(hero)`
+    (`currentHp <= 0`), `getHealCost(hero)` (rarity-scaled:
+    `HEAL_COST_BASE` × `HEAL_COST_RARITY_MULTIPLIER` 1/2/4 for
+    common/rare/epic), `canHealHero`, `healHero` (spend + restore to
+    max HP, no-ops safely on a non-downed hero).
+  - `dungeons.js`: `canSendHeroToDungeon` now also rejects a downed
+    hero (checked separately from `isHeroIdle` — a hero can be idle
+    AND downed at once, two different reasons Send is disabled).
+    `resolveDungeon()`'s failure branch rewritten exactly per
+    design.md: sets `currentHp = 0`, returns `{success:false,
+    reward:{}, xp:0}` — the old 50%-reward/50%-XP partial-credit
+    branch and its `floorRewardHalf()` helper are gone entirely, not
+    just unreachable dead code. Success path untouched (verified,
+    not just assumed — see below).
+  - `interactionHandlers.js`: Barracks `interact()` now surfaces a
+    downed-hero count in its panel text (same convention as Dungeon
+    Gate surfacing idle/busy counts). Added a `heal(gameState,
+    heroId)` action method on the barracks handler object per task
+    1.5's literal instruction. **Flagging a structural note for
+    review:** every other handler in this file only ever exposes
+    `interact()` — actual state-mutating actions (recruit, upgrade,
+    craft) are wired directly in `main.js` importing the underlying
+    module function, not routed through this file. Adding
+    `barracks.heal()` here is a deliberate one-off to satisfy task
+    1.5 as literally stated, not a new file-wide convention; the
+    actual reusable logic still lives in `heroes.js`
+    (`healHero`/`getHealCost`/`canHealHero`) so Frontend Engineer can
+    import those directly instead if that fits the button-wiring
+    pattern better — flagging so nobody assumes every handler should
+    now grow action methods.
+  Dungeon Panel Reward Preview (design.md's other UI item) needed no
+  backend work — `DUNGEON_TIERS.fullReward`/`fullXp` already existed;
+  design.md itself says so explicitly.
+  **Verification:** `node --check` on all 3 touched files. Full suite:
+  163/165 (2 failures are the old `resolveDungeon math` partial-credit
+  tests in `dungeons.test.js` — *expected* fallout from removing that
+  branch per design.md, not a regression; updating/removing those
+  tests is Documentation & Testing's task 4.2, deliberately left
+  untouched here). Functional simulation (thrown away after use)
+  covered: HP inits to rarity max on recruit; forced guaranteed
+  failure (common hero vs Hard) gives exactly zero reward/XP and sets
+  currentHp to 0; downed hero blocked from Send even while idle and
+  fully funded; heal cost multiplier verified exactly 1x/4x for
+  common/epic; heal restores HP, unblocks Send, and correctly
+  no-ops (no resource spend) on an already-healthy hero; Barracks
+  panel text and `.heal()` action both verified via `HANDLERS`
+  directly; forced guaranteed success (epic vs Easy) confirmed
+  completely unchanged — full reward, full XP, hero not downed.
+  **Not done (out of scope for Backend Engineer):** roster UI
+  (greyed-out downed styling), heal button, reward-preview UI,
+  downed/HP display (Frontend Engineer 2.x); updating/removing the 2
+  now-stale partial-credit tests, new heal/downed tests, spec updates
+  (Documentation & Testing 4.x); resolution-math/heal-cost sign-off
+  (Code Reviewer 3.x).
+  Files modified: `js/heroes.js`, `js/dungeons.js`,
+  `js/interactionHandlers.js`.
+  **Next backend task:** add-hero-classes (last in the requested
+  order) — class/equipment fields on heroes, `EQUIPMENT_POWER` folded
+  into `effectivePower()`, equip/unequip functions, 5 new crafting
+  recipes. Should build on top of the `currentHp`/`isDowned` fields
+  added this session without disturbing them.

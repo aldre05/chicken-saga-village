@@ -1,18 +1,22 @@
 # Tasks: 10 Houses, Town Hall to Level 10
 
 ## Backend Engineer
-- [ ] 1.1 Update `MAX_TOWN_HALL_LEVEL` and extend `UPGRADE_COSTS` in
+- [x] 1.1 Update `MAX_TOWN_HALL_LEVEL` and extend `UPGRADE_COSTS` in
       townHall.js exactly per design.md's table — don't reinterpret
       the numbers
-- [ ] 1.2 Extend `HOUSE_IDS` in buildingLevels.js to include
+- [x] 1.2 Extend `HOUSE_IDS` in buildingLevels.js to include
       house_6-10
-- [ ] 1.3 Extend `UNLOCK_CONFIG` in buildingUnlocks.js with the 5 new
+- [x] 1.3 Extend `UNLOCK_CONFIG` in buildingUnlocks.js with the 5 new
       house entries per design.md
-- [ ] 1.4 Verify (don't assume) that population sum, capacity
+- [x] 1.4 Verify (don't assume) that population sum, capacity
       formula, and upgrade cost formula all correctly pick up the
       extended HOUSE_IDS array with zero other code changes — this
       is the whole point of the array being iterated generically,
       confirm it actually holds
+      (Verification found 2 real gaps design.md's claim missed:
+      `BASE_UPGRADE_COST` and `HOUSE_DISPLAY_NAME` both stopped at
+      house_5 and needed their own new entries — fixed, see
+      memory.md 2026-07-22 entry for detail.)
 
 ## Frontend Engineer
 - [ ] 2.1 Add 5 new house buildings to map.js

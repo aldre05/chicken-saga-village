@@ -1,7 +1,7 @@
 // crafting.js — combines resources into inventory items. No selling,
 // no NFTs — just an in-game inventory system.
 
-import { canAfford, spendResources } from './resources.js';
+import { canAfford, spendResources, RESOURCE_IDS } from './resources.js';
 
 export const RECIPES = [
   { id: 'nest_charm',   name: 'Nest Charm',   cost: { egg: 2, feathers: 2 } },
@@ -9,15 +9,49 @@ export const RECIPES = [
   { id: 'chicken_feed', name: 'Chicken Feed', cost: { rice: 5 } },
   { id: 'plank',        name: 'Plank',        cost: { wood: 5 } },
   { id: 'brick',        name: 'Brick',        cost: { stone: 5 } },
-  { id: 'ingot',        name: 'Ingot',        cost: { ore: 5 } }
+  { id: 'ingot',        name: 'Ingot',        cost: { ore: 5 } },
+  // Equipment + Heal Potion, per
+  // openspec/changes/add-hero-classes/design.md's table exactly.
+  // NOTE: Boots' cost references `plank`, an inventory item (from the
+  // recipe above), not a raw resource in resources.js's RESOURCE_IDS
+  // — see splitCost()/canAffordRecipe() below, which is why this
+  // recipe list can mix the two in one cost dict without every other
+  // (resource-only) recipe needing any change.
+  { id: 'sword',       name: 'Sword',       cost: { ore: 15, wood: 5 } },
+  { id: 'bow',         name: 'Bow',         cost: { wood: 15, feathers: 10 } },
+  { id: 'staff',       name: 'Staff',       cost: { wood: 10, stone: 10 } },
+  { id: 'armor',       name: 'Armor',       cost: { ore: 10, stone: 10 } },
+  { id: 'boots',       name: 'Boots',       cost: { plank: 3, feathers: 5 } },
+  { id: 'heal_potion', name: 'Heal Potion', cost: { rice: 10 } }
 ];
 
 export function createInventoryState() {
   return {};
 }
 
-export function getCraftableRecipes(resourceState) {
-  return RECIPES.filter(r => canAfford(resourceState, r.cost));
+// Splits a recipe's cost dict into the raw-resource portion (checked/
+// spent via resources.js against resourceState) and the inventory-item
+// portion (checked/spent against inventoryState directly) — a cost id
+// is a raw resource if and only if it's a key in resources.js's
+// RESOURCE_CONFIG; everything else must be a previously-crafted item.
+function splitCost(costDict) {
+  const resourceCost = {};
+  const itemCost = {};
+  for (const [id, amount] of Object.entries(costDict)) {
+    if (RESOURCE_IDS.includes(id)) resourceCost[id] = amount;
+    else itemCost[id] = amount;
+  }
+  return { resourceCost, itemCost };
+}
+
+export function canAffordRecipe(resourceState, inventoryState, recipe) {
+  const { resourceCost, itemCost } = splitCost(recipe.cost);
+  if (!canAfford(resourceState, resourceCost)) return false;
+  return Object.entries(itemCost).every(([id, amount]) => (inventoryState[id] || 0) >= amount);
+}
+
+export function getCraftableRecipes(resourceState, inventoryState) {
+  return RECIPES.filter(r => canAffordRecipe(resourceState, inventoryState, r));
 }
 
 export function getRecipeById(recipeId) {
@@ -28,9 +62,14 @@ export function getRecipeById(recipeId) {
 // happened, false if unaffordable.
 export function craftSpecific(resourceState, inventoryState, recipeId) {
   const recipe = getRecipeById(recipeId);
-  if (!recipe || !canAfford(resourceState, recipe.cost)) return false;
+  if (!recipe || !canAffordRecipe(resourceState, inventoryState, recipe)) return false;
 
-  spendResources(resourceState, recipe.cost);
+  const { resourceCost, itemCost } = splitCost(recipe.cost);
+  spendResources(resourceState, resourceCost);
+  for (const [id, amount] of Object.entries(itemCost)) {
+    inventoryState[id] -= amount;
+  }
+
   inventoryState[recipe.id] = (inventoryState[recipe.id] || 0) + 1;
   return true;
 }

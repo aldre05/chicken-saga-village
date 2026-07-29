@@ -18,6 +18,43 @@ export const MAX_HERO_LEVEL = 20;
 export const HEAL_COST_BASE = { egg: 30, feathers: 20 };
 export const HEAL_COST_RARITY_MULTIPLIER = { common: 1, rare: 2, epic: 4 };
 
+// Weapon-type class gating only — no ability differences between
+// classes (see openspec/changes/add-hero-classes/design.md's Goals).
+export const HERO_CLASSES = {
+  warrior: { name: 'Warrior', weaponType: 'sword' },
+  archer: { name: 'Archer', weaponType: 'bow' },
+  scholar: { name: 'Scholar', weaponType: 'staff' }
+};
+export const HERO_CLASS_IDS = Object.keys(HERO_CLASSES);
+
+function pickRandomClass() {
+  return HERO_CLASS_IDS[Math.floor(Math.random() * HERO_CLASS_IDS.length)];
+}
+
+export const EQUIPMENT_SLOTS = ['weapon', 'armor', 'boots'];
+
+// Equipment items craftable at the Workbench (see crafting.js's
+// RECIPES) that can be equipped on a hero. `classRestriction: null`
+// means any class can equip it. Power bonuses are a first-guess
+// balance value flagged in design.md for playtesting. Heal Potion is
+// deliberately NOT here — it's a consumable, not a slot item (see
+// design.md's Equipment Items table).
+export const EQUIPMENT_ITEMS = {
+  sword: { slot: 'weapon', classRestriction: 'warrior', power: 8 },
+  bow: { slot: 'weapon', classRestriction: 'archer', power: 8 },
+  staff: { slot: 'weapon', classRestriction: 'scholar', power: 8 },
+  armor: { slot: 'armor', classRestriction: null, power: 6 },
+  boots: { slot: 'boots', classRestriction: null, power: 4 }
+};
+
+// Flat itemId -> power map, derived from EQUIPMENT_ITEMS above rather
+// than duplicated, matching design.md's effectivePower() snippet
+// (`EQUIPMENT_POWER[itemId]`) exactly by name for anyone reading this
+// file against the design doc.
+export const EQUIPMENT_POWER = Object.fromEntries(
+  Object.entries(EQUIPMENT_ITEMS).map(([itemId, cfg]) => [itemId, cfg.power])
+);
+
 // Fixed (non-randomized) base stats per rarity — keeps balance simple
 // and predictable for v1 (see design.md). power = attack + defense +
 // floor(hp / 5), one transparent number used for dungeon resolution.
@@ -92,11 +129,13 @@ export function recruitHero(rosterState, resourceState) {
     id: makeHeroId(),
     name: pickRandomName(picked.rarity),
     rarity: picked.rarity,
+    class: pickRandomClass(),
     level: 1,
     xp: 0,
     busyUntil: null,
     dungeonTier: null,
-    currentHp: RARITY_BY_ID[picked.rarity].hp
+    currentHp: RARITY_BY_ID[picked.rarity].hp,
+    equipment: { weapon: null, armor: null, boots: null }
   };
   rosterState.roster.push(hero);
   return hero;
@@ -104,10 +143,17 @@ export function recruitHero(rosterState, resourceState) {
 
 // power at the hero's current level: basePower scaled +10%/level
 // above level 1 (linear, matches every other progression curve in
-// this project), capped at MAX_HERO_LEVEL.
+// this project), capped at MAX_HERO_LEVEL, plus the flat sum of all
+// equipped items' power bonuses (equipment doesn't scale with level,
+// per design.md's formula — it's added after the level scaling, not
+// multiplied into it).
 export function effectivePower(hero) {
   const level = Math.min(MAX_HERO_LEVEL, hero.level);
-  return basePower(hero.rarity) * (1 + (level - 1) * 0.1);
+  const base = basePower(hero.rarity) * (1 + (level - 1) * 0.1);
+  const equipmentBonus = Object.values(hero.equipment || {})
+    .filter(Boolean)
+    .reduce((sum, itemId) => sum + (EQUIPMENT_POWER[itemId] || 0), 0);
+  return base + equipmentBonus;
 }
 
 export function xpForNextLevel(level) {
@@ -182,6 +228,49 @@ export function healHero(hero, resourceState) {
   if (!canHealHero(hero, resourceState)) return false;
   spendResources(resourceState, getHealCost(hero));
   hero.currentHp = getMaxHp(hero);
+  return true;
+}
+
+// Can `itemId` currently be equipped onto `hero`? Checks the item
+// exists, the hero has at least one in inventory, and (per design.md)
+// the class restriction — weapon items are class-locked, armor/boots
+// are open to any class.
+export function canEquipItem(hero, inventoryState, itemId) {
+  const itemCfg = EQUIPMENT_ITEMS[itemId];
+  if (!itemCfg) return false;
+  if ((inventoryState[itemId] || 0) < 1) return false;
+  if (itemCfg.classRestriction && itemCfg.classRestriction !== hero.class) return false;
+  return true;
+}
+
+// Equips `itemId` into its slot (derived from EQUIPMENT_ITEMS, not
+// passed separately — an item only ever belongs to one slot).
+// Swapping returns whatever was previously equipped in that slot back
+// to inventory rather than destroying it (per design.md's Equipping
+// Flow). Returns true if the equip happened.
+export function equipHero(hero, inventoryState, itemId) {
+  if (!canEquipItem(hero, inventoryState, itemId)) return false;
+
+  const itemCfg = EQUIPMENT_ITEMS[itemId];
+  const previousItemId = hero.equipment[itemCfg.slot];
+
+  inventoryState[itemId] -= 1;
+  if (previousItemId) {
+    inventoryState[previousItemId] = (inventoryState[previousItemId] || 0) + 1;
+  }
+  hero.equipment[itemCfg.slot] = itemId;
+  return true;
+}
+
+// Unequips whatever's in `slot`, returning it to inventory. Returns
+// true if there was something to unequip, false if the slot was
+// already empty (no-op, nothing to return).
+export function unequipHero(hero, inventoryState, slot) {
+  const itemId = hero.equipment[slot];
+  if (!itemId) return false;
+
+  inventoryState[itemId] = (inventoryState[itemId] || 0) + 1;
+  hero.equipment[slot] = null;
   return true;
 }
 

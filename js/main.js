@@ -542,7 +542,7 @@ function updateCraftingPanel(nearest) {
     const btn = document.createElement('button');
     btn.className = 'crafting-craft-btn';
     btn.textContent = 'Craft';
-    const affordable = getCraftableRecipes(gameState.resources).some(r => r.id === recipe.id);
+    const affordable = getCraftableRecipes(gameState.resources, gameState.inventory).some(r => r.id === recipe.id);
     btn.disabled = !affordable;
     btn.addEventListener('click', () => {
       const ok = craftSpecific(gameState.resources, gameState.inventory, recipe.id);

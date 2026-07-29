@@ -11,7 +11,7 @@ import { createBuildingLevelState, getMaxWorkers, HOUSE_IDS } from './buildingLe
 import { createQuestBoardState } from './questBoard.js';
 import { createLuckyWheelState } from './luckyWheel.js';
 import { createUpkeepState } from './upkeep.js';
-import { createHeroRosterState } from './heroes.js';
+import { createHeroRosterState, HERO_CLASS_IDS, getMaxHp } from './heroes.js';
 
 const SAVE_KEY = 'chickenVillageSave';
 
@@ -107,6 +107,29 @@ export function loadGameState() {
       },
       popularity: typeof parsed.popularity === 'number' ? parsed.popularity : 0
     };
+
+    // Heroes recruited before the dungeon-failure and hero-classes
+    // changes shipped won't have currentHp/class/equipment in their
+    // saved shape (recruitHero() only started setting those once each
+    // change landed). Backfill per-hero rather than at the roster
+    // level, since the array-level merge above takes the saved
+    // roster's contents wholesale and does no per-item shape check.
+    // Missing currentHp defaults to full HP for the hero's rarity
+    // (not 0 — a hero with no recorded HP was never downed, it
+    // predates HP existing at all); missing class is assigned
+    // randomly, same as at recruitment; missing equipment defaults to
+    // all-empty slots.
+    for (const hero of loaded.heroes.roster) {
+      if (typeof hero.currentHp !== 'number') {
+        hero.currentHp = getMaxHp(hero);
+      }
+      if (!HERO_CLASS_IDS.includes(hero.class)) {
+        hero.class = HERO_CLASS_IDS[Math.floor(Math.random() * HERO_CLASS_IDS.length)];
+      }
+      if (!hero.equipment || typeof hero.equipment !== 'object') {
+        hero.equipment = { weapon: null, armor: null, boots: null };
+      }
+    }
 
     // grain_store → rice_paddy rename: carry over unlock/level state
     // under the old key if present, so a returning player doesn't

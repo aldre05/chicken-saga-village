@@ -1,16 +1,20 @@
 # Tasks: Dungeon Failure Consequences
 
 ## Backend Engineer
-- [ ] 1.1 Add `currentHp` to hero creation (heroes.js) — initialize
+- [x] 1.1 Add `currentHp` to hero creation (heroes.js) — initialize
       to rarity's max HP
-- [ ] 1.2 Add `getHealCost(hero)` and `healHero(hero, resourceState)`
+- [x] 1.2 Add `getHealCost(hero)` and `healHero(hero, resourceState)`
       to heroes.js (checks affordability, spends, restores currentHp)
-- [ ] 1.3 Add `isDowned(hero)` helper
-- [ ] 1.4 Update `resolveDungeon()` in dungeons.js: failure sets
+- [x] 1.3 Add `isDowned(hero)` helper
+- [x] 1.4 Update `resolveDungeon()` in dungeons.js: failure sets
       currentHp to 0, removes the old 50%-partial-credit branch
       entirely
-- [ ] 1.5 Add heal action to the Barracks handler in
+- [x] 1.5 Add heal action to the Barracks handler in
       interactionHandlers.js
+      (Note: this breaks 2 pre-existing partial-credit tests in
+      dungeons.test.js as expected fallout — updating/removing them
+      is Documentation & Testing's 4.2, deliberately left for that
+      role.)
 
 ## Frontend Engineer
 - [ ] 2.1 Hero roster panel: visually mark downed heroes (greyed

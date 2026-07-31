@@ -20,13 +20,13 @@
       on swap)
 
 ## Frontend Engineer
-- [ ] 2.1 Hero roster panel: show each hero's class + equipped items
-- [ ] 2.2 Equip UI: per-slot picker showing inventory items that fit
+- [x] 2.1 Hero roster panel: show each hero's class + equipped items
+- [x] 2.2 Equip UI: per-slot picker showing inventory items that fit
       (slot + class match), wired to the new equip functions
-- [ ] 2.3 Workbench crafting panel: add the 5 new equipment recipes +
+- [x] 2.3 Workbench crafting panel: add the 5 new equipment recipes +
       Heal Potion to the existing recipe list (reuse existing
       recipe-row/Craft-button pattern, don't rebuild it)
-- [ ] 2.4 Heal Potion: consumable-use UI (use directly from
+- [x] 2.4 Heal Potion: consumable-use UI (use directly from
       inventory, applies to a chosen hero, instant)
 
 ## Code Reviewer

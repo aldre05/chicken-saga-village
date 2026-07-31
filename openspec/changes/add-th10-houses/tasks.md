@@ -19,11 +19,11 @@
       memory.md 2026-07-22 entry for detail.)
 
 ## Frontend Engineer
-- [ ] 2.1 Add 5 new house buildings to map.js
-- [ ] 2.2 Run the existing collision-verification script — zero
+- [x] 2.1 Add 5 new house buildings to map.js
+- [x] 2.2 Run the existing collision-verification script — zero
       overlaps, nothing on solid tiles, same standard as every prior
       building
-- [ ] 2.3 Confirm HUD/population display correctly shows the new max
+- [x] 2.3 Confirm HUD/population display correctly shows the new max
       (150) once all 10 houses are unlocked and maxed
 
 ## Code Reviewer

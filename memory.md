@@ -10,73 +10,181 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Three change proposals had their Frontend sections completed this
-session, in this order (deliberate — click-to-open-panels first since
-it's a foundational refactor every other panel-touching change would
-otherwise have had to redo work against):
-1. `add-click-to-open-panels` (2.1–2.6): panels are now click/E-press
-   toggle-driven (`selectedBuildingId`) instead of proximity-automatic.
-2. `add-hero-classes` (2.1–2.4) + `add-dungeon-failure` (2.1–2.3),
-   done together since both touch the hero roster panel: class/
-   equipment display, equip UI, downed-hero heal flow, dungeon reward
-   preview, distinct failure popup.
-3. `add-th10-houses` (2.1–2.3): 5 new houses on the map, collision-
-   verified, population cap math confirmed to reach 150.
-See "Frontend Session: Click-to-Open-Panels + Hero-Classes/Dungeon-
-Failure + TH10-Houses (2026-07-29)" below for full detail, including
-several real bugs found and fixed along the way (not just the
-assigned tasks), **and an important operational incident**: the
-sandbox environment reset mid-session, silently wiping the local git
-checkout (all three phases were committed locally but never pushed —
-no GitHub credentials in this environment). Caught it immediately via
-a routine "does this directory still exist" check rather than
-discovering it later, reconstructed all three phases from the exact
-diffs still visible in that session's own conversation transcript
-(not re-derived from scratch), re-verified everything identically via
-the test suite, and — this time — exported each phase to
-`/mnt/user-data/outputs/` immediately after committing it, rather
-than batching all three and exporting at the end. **See the new
-Active Tasks item below about this risk going forward.** Backend/Code
-Reviewer/Documentation sections for all three changes are still open.
+**All 4 pending change proposals now have their Code Reviewer sections
+signed off as of this session** (`add-click-to-open-panels`,
+`add-dungeon-failure`, `add-hero-classes`, `add-th10-houses`) — plus a
+real bug found and fixed along the way (Heal Potion doing a full heal
+instead of design.md's specified 25%). Only Documentation & Testing
+(4.x) remains open across all four; `add-heroes-dungeons` from two
+sessions ago is unaffected (already fully done through 3.5).
+
+**Also found and fixed a docs-vs-reality gap, not a code bug:**
+`add-click-to-open-panels`'s `tasks.md` showed every single checkbox
+(Backend 1.1, Frontend 2.1–2.6) unchecked, but the actual code in
+`main.js`/`interactions.js` was fully and correctly implemented —
+confirmed by direct reading against design.md's spec line by line,
+not assumed from the checkboxes. This meant the change was actually
+ready for Code Reviewer work despite `tasks.md` suggesting otherwise;
+fixed the checkboxes after independently re-verifying each of the 6
+Frontend items. Worth noting as a pattern: this project's `tasks.md`
+files aren't fully reliable as a "is this ready" signal on their own —
+check the live code, especially before deciding something isn't ready
+for the next role's pass.
+
+See "Code Reviewer Session: All 4 Pending Proposals (2026-07-30)"
+below for full detail.
 
 ## Active Tasks
-1. **NEW — process risk, not a code bug:** this environment has no
-   git push access (confirmed by attempting `git push` and getting an
-   auth error), so local commits are the *only* record of a session's
-   work until the user manually uploads the files. This session hit a
-   sandbox reset that wiped an entire local checkout mid-task,
-   destroying ~3 phases of already-committed, already-verified work
-   with nothing recoverable except what happened to still be visible
-   in that conversation's own transcript. **Recommendation for future
-   sessions doing multi-phase work in one sitting:** export
-   (`present_files`) each phase to the user immediately after
-   verifying it, not just at the very end — treat the outputs
-   directory as the actual durable record, not local git history.
-2. Code Reviewer + Documentation & Testing passes still needed for
-   all three changes above (their tasks.md sections are untouched by
-   this session — Frontend only).
-3. **Give refined goods a purpose — RESOLVED as of this session.**
-   `add-hero-classes` gives Plank/Ore/Stone/etc. a real destination
-   (equipment crafting). Documentation & Testing's own task 4.3 for
-   that change is to formally mark this resolved in this file; noting
-   it here now so it isn't re-flagged as still-open in the meantime.
-4. **Still open — found by a prior session, not fixed:**
+1. **NEW — real bug found and fixed this session:** `heroes.js`'s
+   `useHealPotion()` set a hero's `currentHp` straight to max (a full
+   heal) instead of the 25% design.md's own table explicitly specifies
+   ("Heal Potion (25%)"), which also undermined design.md's own stated
+   reason for having both a potion and a paid Barracks heal (a cheap
+   10-rice item fully outclassing the rarity-scaled paid heal). Fixed
+   to the additive `Math.min(max, current + ceil(max * 0.25))` formula,
+   matching a formula Backend had already suggested in an earlier
+   session's note but which the eventual implementer didn't use. See
+   this session's log for full detail and the regression test that
+   confirms it.
+2. **NEW — flagged, not changed (matches an already-known design.md
+   open question, not a new gap):** the 25%-heal fix means a downed
+   hero (0 HP) CAN be brought back above 0 via a potion for far less
+   than the Barracks heal cost, since `canUseHealPotion` allows use on
+   any hero below max HP, downed or not. design.md's own Risks section
+   already flags potion-vs-paid-heal overlap as something to confirm
+   during playtesting ("confirm both can coexist... without feeling
+   redundant") — this is that exact tension made concrete, not an
+   oversight this session introduced. Left as-is rather than
+   additionally gating potion use against `isDowned`, since that would
+   be inventing a new rule design.md doesn't state, not fixing a clear
+   deviation from one. Next design pass should make an explicit call.
+3. Documentation & Testing passes still needed for all 4 proposals
+   worked on this session and last (their `tasks.md` 4.x sections are
+   untouched by any Code Reviewer/Frontend session so far) — this is
+   now the single largest block of outstanding work across the whole
+   project: new specs, spec updates, `test/heroes.test.js`/
+   `test/dungeons.test.js` extensions for class/equipment/heal-potion/
+   downed-state coverage, `memory.md` Decisions entries, and (for
+   `add-heroes-dungeons` specifically) archiving `openspec/changes/`.
+4. Give refined goods a purpose — resolved (see prior session).
+5. **Still open — found by a prior session, not fixed:**
    `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
-   `requestAnimationFrame` timestamp instead of `Date.now()` — see
-   prior sessions' notes below. Confirmed still present; not touched
-   again this session since it's unrelated to any of the three
-   tickets worked on.
-5. **Still open:** `npm test`'s literal script (`node --test test/`)
+   `requestAnimationFrame` timestamp instead of `Date.now()`. Confirmed
+   still present this session; not touched, unrelated to what was
+   worked on.
+6. **Still open:** `npm test`'s literal script (`node --test test/`)
    fails with `MODULE_NOT_FOUND` in this execution environment —
    `node --test test/*.test.js` works fine and is what every session
-   has actually been running. Pre-existing, unrelated to any of this
-   session's changes.
-6. Real art integration (still 100% placeholder) — unchanged.
-7. **Playtest all three shipped features in an actual browser** —
-   this session verified thoroughly via headless-jsdom smoke tests
-   (real simulated input events + DOM observation, not just code
-   reasoning) plus the persistent test suite, but none of it is a
+   has actually been running. Pre-existing.
+7. Real art integration (still 100% placeholder) — unchanged.
+8. **Playtest all 4 shipped features in an actual browser** — this
+   session verified thoroughly via a mix of scripted logic-level tests
+   (heroes.js/dungeons.js/crafting.js/townHall.js/buildingLevels.js/
+   buildingUnlocks.js, all pure-logic and fast) and a headless-jsdom
+   smoke test for the click-to-open-panels UI specifically (real
+   simulated input events + DOM observation for the parts that
+   succeeded — E-press open/toggle/switch, walk-away auto-close; the
+   jsdom test's own pathing failed to reach Town Hall/Barracks/Dungeon
+   Gate within budget across several attempts, so those specific paths
+   fell back to direct code review rather than being live-simulated —
+   see this session's log for the precise scope). None of it is a
    human looking at it live.
+
+## Code Reviewer Session: All 4 Pending Proposals (2026-07-30)
+Fresh clone each time per explicit standing instruction, confirmed
+HEAD before starting and re-confirmed unchanged across several
+re-clones mid-session (`685ab75` throughout).
+
+**First finding: `add-click-to-open-panels`'s `tasks.md` was entirely
+stale.** Every checkbox (Backend 1.1, Frontend 2.1-2.6) was unchecked,
+which would normally mean "not ready for Code Reviewer work" — but
+direct reading of `main.js`/`interactions.js` against design.md's
+exact spec showed the feature was fully and correctly implemented.
+Fixed the stale checkboxes after this independent verification rather
+than either blindly trusting tasks.md and skipping the review, or
+blindly trusting the code without checking it matched the spec.
+
+**Verified via a mix of jsdom simulation and direct code review.** A
+temporary jsdom smoke test (not committed — `npm install --no-save
+jsdom`, deleted along with the test script before finishing) booted
+the real `index.html` + `main.js`, manually drove
+`requestAnimationFrame` to fast-forward the game loop deterministically,
+and dispatched genuine `KeyboardEvent`s to walk a real player around.
+Confirmed live: E-press open/toggle-close/re-open on a resource
+building, switching between two different buildings correctly updates
+panel content, and walking far away auto-closes the panel with no
+explicit close action. The test's own pathing repeatedly failed to
+navigate to Town Hall/Barracks/Dungeon Gate within budget — rather
+than keep burning effort tuning a test-script pathfinding problem,
+fell back to direct code review for those specific paths and
+documented the exact scope of what was/wasn't live-simulated in
+tasks.md instead of overclaiming coverage.
+
+**`add-dungeon-failure`, `add-hero-classes`, `add-th10-houses`:** all
+pure-logic (no DOM), verified with direct scripted checks against
+heroes.js/dungeons.js/crafting.js/townHall.js/buildingLevels.js/
+buildingUnlocks.js rather than jsdom. All checks passed except one:
+
+**Found and fixed a real bug, not just verified against one:**
+`heroes.js`'s `useHealPotion()` set a downed/injured hero's `currentHp`
+straight to `getMaxHp(hero)` — a full heal — but design.md's own
+Equipment Items table explicitly labels it "Heal Potion (25%)" and
+lists its effect as "restores 25% max HP, instant use". This directly
+contradicts a value stated in the design doc, and undermines
+design.md's own stated reasoning for having both a potion and a paid
+Barracks heal ("potion = quick partial heal, Barracks paid heal = full
+restore" — a full-heal potion at a flat 10-rice cost strictly
+dominates the rarity-scaled paid heal). Cross-checked memory.md and
+found this had actually been flagged before it was even written: an
+earlier Backend session's note explicitly said Heal Potion's
+application logic wasn't assigned to anyone yet and suggested the
+exact formula (`Math.min(getMaxHp(hero), hero.currentHp +
+Math.ceil(getMaxHp(hero) * 0.25))`) — whoever eventually implemented
+`useHealPotion()` didn't use it. Fixed to that formula. Scripted
+regression test confirms: no-op at full HP, correct partial-heal
+amount, correctly capped at max, and — flagging rather than silently
+also "fixing" — confirmed a downed hero CAN be brought back above 0
+via a potion for far less than the Barracks heal cost, since
+`canUseHealPotion` allows use on any hero below max, not just downed
+ones. This is exactly the tension design.md's own Risks section
+already flags — left the gating as-is rather than inventing an extra
+rule design.md doesn't state; noted in Active Tasks for a future
+design pass to make an explicit call.
+
+**Full verification breakdown by proposal** (same standard sweep
+repeated per proposal — syntax + import-graph + full test suite,
+`node --check` on all 22 `js/*.js` files clean each time, full suite
+161/161 non-deferred passing throughout, same 3 pre-existing/deferred
+failures as documented in prior sessions):
+- `add-dungeon-failure` 3.1-3.4: downed-hero send rejection (function
+  AND UI picker, which excludes downed heroes from the list entirely),
+  heal cost exact-multiplier check for all 3 rarities (1x/2x/4x),
+  success path fully unaffected across all 3 tiers, failure path
+  grants nothing at all.
+- `add-hero-classes` 3.1-3.4: all 6 class/weapon mismatch combinations
+  rejected, correct-class equips succeed, armor/boots confirmed
+  unrestricted; swap-returns-old-item via `unequipHero`;
+  `effectivePower` sums all 3 equipped slots correctly (incremental
+  equip confirmed exact per-item deltas); all 6 new crafting recipes
+  match design.md's cost table exactly; Boots' item-based cost (3
+  plank, not a raw resource) genuinely enforced end-to-end.
+- `add-th10-houses` 3.1-3.3: all 5 new houses' `requiresTownHall`
+  gating confirmed at the exact boundary (isolated from any
+  resource-affordability confound), exact unlock costs match
+  design.md; Town Hall's level-10 cap confirmed exact; all 9
+  `UPGRADE_COSTS` entries cross-checked; population math (10x15=150)
+  computed directly; generic per-house logic confirmed to actually
+  extend correctly to house_6-10.
+
+Files modified: `js/heroes.js` (Heal Potion fix),
+`openspec/changes/add-click-to-open-panels/tasks.md`,
+`openspec/changes/add-dungeon-failure/tasks.md`,
+`openspec/changes/add-hero-classes/tasks.md`,
+`openspec/changes/add-th10-houses/tasks.md`, `memory.md`. No test
+files added this session (all verification was scripted/throwaway or
+jsdom, not committed) — Documentation & Testing's 4.x tasks across all
+4 proposals still need real `test/*.test.js` coverage for the new
+heal-potion/class/equipment/downed-state/th10 logic.
 
 ## Frontend Session: Click-to-Open-Panels + Hero-Classes/Dungeon-Failure + TH10-Houses (2026-07-29)
 **Sequencing decision (explicitly asked for, not assumed):**

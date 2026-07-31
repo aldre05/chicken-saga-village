@@ -17,13 +17,13 @@
       role.)
 
 ## Frontend Engineer
-- [ ] 2.1 Hero roster panel: visually mark downed heroes (greyed
+- [x] 2.1 Hero roster panel: visually mark downed heroes (greyed
       out or similar), disable "send to dungeon" for them, add a
       "Heal" button showing cost (reuse `formatCostHTML` for
       insufficient-resource red-highlighting)
-- [ ] 2.2 Dungeon panel: show potential full reward + XP before
+- [x] 2.2 Dungeon panel: show potential full reward + XP before
       sending, alongside existing entry cost
-- [ ] 2.3 Floating popup / distinct visual feedback for a dungeon
+- [x] 2.3 Floating popup / distinct visual feedback for a dungeon
       failure result vs. success (should read as clearly different
       outcomes, not just different text)
 

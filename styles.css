@@ -218,6 +218,13 @@ body {
   0% { transform: translateY(0); opacity: 1; }
   100% { transform: translateY(-40px); opacity: 0; }
 }
+/* Dungeon-failure popup — same shape as .floating-popup but a
+   distinctly different color, not just different wording, so a
+   failure genuinely reads as a different kind of outcome at a glance
+   (add-dungeon-failure task 2.3). */
+.floating-popup-failure {
+  color: var(--rust-red-bright);
+}
 
 .game-wrap {
   display: flex;
@@ -589,9 +596,17 @@ body {
   justify-content: space-between;
   gap: 10px;
   background: var(--panel-wood-light);
+  border: 1px solid transparent;
   border-radius: 6px;
   padding: 6px 10px;
+  width: 100%;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
 }
+.hero-roster-row:hover { border-color: var(--egg-gold); }
+.hero-roster-row-expanded { border-color: var(--egg-gold-bright); }
+.hero-roster-row-downed { opacity: 0.65; }
 .hero-roster-info {
   display: flex;
   flex-direction: column;
@@ -614,11 +629,84 @@ body {
 }
 .hero-status-idle { color: var(--egg-gold-bright); }
 .hero-status-busy { color: var(--rust-red-bright); }
+.hero-status-downed { color: var(--rust-red-bright); font-weight: 600; }
+
+.hero-manage-panel {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: -2px 0 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.hero-manage-heal-row, .hero-manage-potion-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.hero-manage-heal-btn, .hero-manage-potion-btn {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--rust-red);
+  color: var(--parchment);
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hero-manage-heal-btn:hover:not(:disabled), .hero-manage-potion-btn:hover { background: var(--rust-red-bright); }
+.hero-manage-heal-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.hero-manage-heal-cost, .hero-manage-potion-count {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--parchment-dim);
+}
+.hero-manage-equipment {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hero-manage-slot-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.hero-manage-slot-label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--parchment);
+  min-width: 90px;
+}
+.hero-manage-slot-btn {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  background: var(--panel-wood-light);
+  color: var(--parchment);
+  border: 1px solid var(--divider);
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hero-manage-slot-btn:hover { border-color: var(--egg-gold); }
 
 .dungeon-tier-list {
   display: flex;
   gap: 6px;
   margin-bottom: 8px;
+}
+.dungeon-reward-preview {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+  margin-bottom: 8px;
+}
+.dungeon-reward-xp {
+  color: var(--egg-gold-bright);
 }
 .dungeon-tier-btn {
   flex: 1;

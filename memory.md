@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-21_
+_Last updated: 2026-07-29_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,58 +10,192 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-Heroes + Dungeons (`openspec/changes/add-heroes-dungeons/`, now
-deleted per the archive step) is fully implemented, reviewed, and
-**now fully documented/tested as of this session** — all of Backend
-(1.1–1.5), Frontend (2.1–2.5), Code Reviewer (3.1–3.5), and
-Documentation & Testing (4.1–4.5) are done. This session: moved
-`heroes.test.js`/`dungeons.test.js` from `js/` (wrong location — they
-worked there by accident since Node's default test discovery isn't
-limited to `test/`, but violated this project's own convention) into
-`test/` where they belong; added hero-roster save/load coverage to
-`gameState.test.js` (wasn't covered at all); wrote
-`openspec/specs/hero-system/spec.md` and
-`openspec/specs/dungeon-system/spec.md` from the actual shipped code
-(not the original proposal — cross-checked against `heroes.js`/
-`dungeons.js`/`main.js` directly); updated `world-map` spec's building
-count and added Barracks/Dungeon Gate; updated `README.md`/
-`docs/ARCHITECTURE.md`'s module lists and lookup tables to include the
-2 new modules; deleted the merged `openspec/changes/add-heroes-dungeons/`
-folder per the standard archive step. 165/165 tests passing.
-**Also confirmed (not re-flagged)**: the stray
-`chicken-saga-village-doctest-session.patch` file that multiple prior
-sessions flagged as still-present is actually gone now — verified via
-a fresh clone this session, not assumed from the old notes.
+Three change proposals had their Frontend sections completed this
+session, in this order (deliberate — click-to-open-panels first since
+it's a foundational refactor every other panel-touching change would
+otherwise have had to redo work against):
+1. `add-click-to-open-panels` (2.1–2.6): panels are now click/E-press
+   toggle-driven (`selectedBuildingId`) instead of proximity-automatic.
+2. `add-hero-classes` (2.1–2.4) + `add-dungeon-failure` (2.1–2.3),
+   done together since both touch the hero roster panel: class/
+   equipment display, equip UI, downed-hero heal flow, dungeon reward
+   preview, distinct failure popup.
+3. `add-th10-houses` (2.1–2.3): 5 new houses on the map, collision-
+   verified, population cap math confirmed to reach 150.
+See "Frontend Session: Click-to-Open-Panels + Hero-Classes/Dungeon-
+Failure + TH10-Houses (2026-07-29)" below for full detail, including
+several real bugs found and fixed along the way (not just the
+assigned tasks), **and an important operational incident**: the
+sandbox environment reset mid-session, silently wiping the local git
+checkout (all three phases were committed locally but never pushed —
+no GitHub credentials in this environment). Caught it immediately via
+a routine "does this directory still exist" check rather than
+discovering it later, reconstructed all three phases from the exact
+diffs still visible in that session's own conversation transcript
+(not re-derived from scratch), re-verified everything identically via
+the test suite, and — this time — exported each phase to
+`/mnt/user-data/outputs/` immediately after committing it, rather
+than batching all three and exporting at the end. **See the new
+Active Tasks item below about this risk going forward.** Backend/Code
+Reviewer/Documentation sections for all three changes are still open.
 
 ## Active Tasks
-1. **NEW — found by a prior session, not fixed (out of scope for that
-   ticket, still needs its own dedicated pass):** `applyUpkeep()` is
-   called from `main.js`'s `loop(now)` using the
-   `requestAnimationFrame` timestamp (time since page load) as its
-   `now` argument, but `upkeepState.lastCheckedAt` is initialized with
-   `Date.now()` (epoch ms) in `createUpkeepState()`. Those are
-   different clocks — `now - lastCheckedAt` is a huge negative number
-   on every call, so egg upkeep likely never actually consumes
-   anything in practice. Separate from the "no consequence at 0 egg"
-   design gap below — this is upkeep not firing *at all*. Not touched
-   this session either (out of scope for Documentation & Testing on
-   the Heroes/Dungeons ticket; still deserves a dedicated pass per the
-   prior session's reasoning, not a drive-by fix folded into an
-   unrelated task).
-2. **Playtest Heroes + Dungeons in an actual browser** — thoroughly
-   verified via persistent tests + code review, but still not a human
-   looking at it in a live browser. In particular: the roster row's
-   countdown display in the sub-frame window between a mission's timer
-   expiring and `resolvePendingDungeons()` clearing it, per the prior
-   session's trace.
-3. Decide egg-upkeep *consequences* at 0 egg (still a no-op even once
-   upkeep is actually firing — see item 1 above, two separate gaps) —
-   unchanged.
-4. Real art integration (still 100% placeholder) — unchanged.
-5. Give refined goods a purpose (Chicken Feed/Plank/Brick/Ingot still
-   just sit in inventory) — unchanged. Now also relevant to
-   Heroes/Dungeons per the original proposal's non-goals (refined
-   goods as hero materials is explicitly deferred, not forgotten).
+1. **NEW — process risk, not a code bug:** this environment has no
+   git push access (confirmed by attempting `git push` and getting an
+   auth error), so local commits are the *only* record of a session's
+   work until the user manually uploads the files. This session hit a
+   sandbox reset that wiped an entire local checkout mid-task,
+   destroying ~3 phases of already-committed, already-verified work
+   with nothing recoverable except what happened to still be visible
+   in that conversation's own transcript. **Recommendation for future
+   sessions doing multi-phase work in one sitting:** export
+   (`present_files`) each phase to the user immediately after
+   verifying it, not just at the very end — treat the outputs
+   directory as the actual durable record, not local git history.
+2. Code Reviewer + Documentation & Testing passes still needed for
+   all three changes above (their tasks.md sections are untouched by
+   this session — Frontend only).
+3. **Give refined goods a purpose — RESOLVED as of this session.**
+   `add-hero-classes` gives Plank/Ore/Stone/etc. a real destination
+   (equipment crafting). Documentation & Testing's own task 4.3 for
+   that change is to formally mark this resolved in this file; noting
+   it here now so it isn't re-flagged as still-open in the meantime.
+4. **Still open — found by a prior session, not fixed:**
+   `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
+   `requestAnimationFrame` timestamp instead of `Date.now()` — see
+   prior sessions' notes below. Confirmed still present; not touched
+   again this session since it's unrelated to any of the three
+   tickets worked on.
+5. **Still open:** `npm test`'s literal script (`node --test test/`)
+   fails with `MODULE_NOT_FOUND` in this execution environment —
+   `node --test test/*.test.js` works fine and is what every session
+   has actually been running. Pre-existing, unrelated to any of this
+   session's changes.
+6. Real art integration (still 100% placeholder) — unchanged.
+7. **Playtest all three shipped features in an actual browser** —
+   this session verified thoroughly via headless-jsdom smoke tests
+   (real simulated input events + DOM observation, not just code
+   reasoning) plus the persistent test suite, but none of it is a
+   human looking at it live.
+
+## Frontend Session: Click-to-Open-Panels + Hero-Classes/Dungeon-Failure + TH10-Houses (2026-07-29)
+**Sequencing decision (explicitly asked for, not assumed):**
+click-to-open-panels first since it's a foundational refactor of
+every panel-update function (`updateBuildingPanel`,
+`updateCraftingPanel`, `updateHeroPanel`, `updateDungeonPanel`) that
+the other two changes would also touch — doing it first meant
+hero-classes/dungeon-failure's panel work only had to happen once,
+against the final function shape. Then hero-classes + dungeon-failure
+together (both modify the hero roster panel). Then th10-houses last
+(fully isolated, zero shared code with the other two).
+
+**Operational incident, worth reading before doing similar multi-
+phase work:** partway through Phase 2, a sandbox environment reset
+silently wiped the entire local git checkout — all three phases were
+committed locally (this environment has no GitHub push access, so
+local commits were the only record) but nothing had been exported to
+`/mnt/user-data/outputs/` yet. Caught this immediately via a routine
+"does the directory still exist" check before continuing, rather than
+discovering it only after trying to keep working in a directory that
+no longer existed. Recovered by re-cloning fresh and reconstructing
+all three phases from the exact diffs still visible in that same
+conversation's own transcript (not re-derived from first principles —
+the content was known, just needed re-applying), re-verifying each
+phase identically (`node --check` + full test suite) as it was
+rebuilt. **This time, exported each phase to outputs immediately
+after committing it**, instead of planning to batch-export everything
+at the end. One real mistake during recovery, caught and fixed rather
+than left standing: a commit message claimed tasks.md had been
+checked off when it actually hadn't (forgot the step, remembered it
+only when re-verifying) — fixed in an honest follow-up commit rather
+than an amended/rewritten one.
+
+**Phase 1 — click-to-open-panels (tasks 2.1–2.6):**
+`selectedBuildingId` replaces `nearest`/proximity as what drives panel
+visibility. Exported `distanceToRect` from `interactions.js` (was
+module-private) for the click handler's range check. Renamed every
+panel function's parameter from `nearest` to `target` throughout —
+keeping the old name post-refactor would have been actively
+misleading. E-press now toggles panels too (same semantics as click),
+except Farmer Joe/Town Hall which keep their old dialogue-only
+behavior (explicit design.md non-goal) via a `DIALOGUE_ONLY_ON_E` set.
+Before the reset, this phase was verified end-to-end with a temporary
+headless-jsdom test (walked a real player via genuine `keydown`/
+`keyup` events, clicked the real canvas via genuine `MouseEvent`s,
+confirmed via DOM observation: click-opens, click-toggles-closed,
+click-empty-ground-closes, E-press-on-Town-Hall-opens-dialogue-not-
+panel, E-press-on-panel-building-toggles-panel,
+walk-out-of-range-auto-closes — all 7 passed). After the reset, the
+reconstructed code was re-verified via `node --check` + the full test
+suite (identical pass) but the jsdom walk-test itself wasn't rerun a
+second time, given it was already proven sound and the reconstruction
+was a faithful line-for-line re-application, not new logic.
+
+**Phase 2 — hero-classes (2.1–2.4) + dungeon-failure (2.1–2.3):**
+Before the reset, this phase involved auditing substantial
+uncommitted work that was mysteriously already sitting in that
+checkout (from earlier in that same conversation, with no direct
+memory of writing it — context had been trimmed). Rather than trust
+it, audited the entire diff line-by-line using `git diff`/`git blame`.
+Found and fixed:
+- A leftover `console.error('DEBUG_TEMP...')` in the E-press handler
+  that would have shipped to production.
+- A genuine crash risk: `formatCostHTML` would throw on
+  `RESOURCE_CONFIG[id]` being `undefined` for item-based costs
+  (Boots' `plank` cost is a crafted inventory item, not a raw
+  resource) — fixed with an `ITEM_CONFIG` fallback + resource-vs-
+  inventory-aware affordability check mirroring `crafting.js`'s own
+  `splitCost()` logic.
+- Stale "Partial credit" wording in `interactionHandlers.js`'s
+  Dungeon Gate E-press dialogue, left over from before
+  `add-dungeon-failure`'s backend removed that mechanic entirely.
+- The dungeon panel's idle-hero picker filtered only on
+  `isHeroIdle`, not `isDowned` — a downed hero could appear in the
+  "who can I send" list (even auto-selected as the default pick) with
+  the Send button silently disabled and no visible reason why. Fixed:
+  excluded from the picker entirely, with a distinct empty-state
+  message ("Every idle hero is downed — heal at the Barracks first")
+  when that's specifically why the list is empty.
+
+Before the reset, verified end-to-end with a fresh headless-jsdom
+smoke test: seeded a save with a downed hero + a healthy hero + a
+sword + Heal Potion in inventory, walked to the Barracks via real
+input events, confirmed downed-status display/styling, Heal button
+enabling/clicking/clearing the downed state, equip flow raising
+`effectivePower` by exactly the item's +8 power bonus (17→25), walked
+to the Dungeon Gate and confirmed the reward preview renders the
+correct tier reward/XP text. A planned check of the Workbench's
+crafting-panel crash fix didn't reach its target within the jsdom
+pathing budget — accepted as a graceful skip, backed by direct code
+review instead. After the reset, the reconstruction was re-verified
+via `node --check` + full test suite (same 161/161 pass) but the
+jsdom walk-test wasn't rerun a second time, same reasoning as Phase 1.
+
+**Phase 3 — th10-houses (2.1–2.3):** 5 new houses added to `map.js`
+(house_6/7/8 mirror the existing house_1/3/5 column pattern shifted
+3 columns west; house_9/10 placed east of the Town Hall cluster,
+house_10 specifically shifted to col25 rather than col23 to clear a
+decorative tree tile at `[16,23]` it would otherwise have overlapped).
+Ran the actual automated collision/bounds test (`test/map.test.js`)
+rather than eyeballing placement — 5/5 pass, both before and after
+the reset (reconstruction was identical). Directly computed the
+population-cap math (10 houses × 15 capacity via a throwaway Node
+script, not just read-and-trust the "generic iteration" design claim)
+— confirmed exactly 150, matching design.md, both times.
+
+**Verification across all three phases:** `node --check` on every
+touched file; full test suite after each phase (161/161 non-deferred
+tests passing throughout, same 3 pre-existing/deliberately-deferred
+failures as noted in prior sessions — 2 dungeon partial-credit tests
++ 1 crafting resource-reference test, all explicitly assigned to
+Documentation & Testing, not reintroduced or worsened).
+
+**Files touched:** `js/interactions.js`, `js/main.js`, `js/heroes.js`,
+`js/interactionHandlers.js`, `js/map.js`, `index.html`, `styles.css`,
+`openspec/changes/add-click-to-open-panels/tasks.md`,
+`openspec/changes/add-hero-classes/tasks.md`,
+`openspec/changes/add-dungeon-failure/tasks.md`,
+`openspec/changes/add-th10-houses/tasks.md`, `memory.md`.
 
 ## Frontend Session: Heroes + Dungeons UI (2026-07-21)
 **Scope:** `openspec/changes/add-heroes-dungeons/tasks.md` 2.1–2.5.
@@ -540,6 +674,30 @@ deliverables — it was a delivery artifact (a git patch for manual
 application), not meant to live in the repo.
 
 ## Session Log
+- **2026-07-29 (Frontend — 3 changes: click-to-open-panels,
+  hero-classes/dungeon-failure, th10-houses):** Sequencing (click-to-
+  open-panels → hero-classes+dungeon-failure together → th10-houses)
+  was explicitly requested, not decided unilaterally. Completed all
+  three changes' Frontend sections; found and fixed a leftover debug
+  statement, a real crash risk in `formatCostHTML` on item-based
+  costs, stale "Partial credit" dialogue text, and a UX gap where
+  downed heroes could be listed/auto-selected in the dungeon
+  hero-picker with a silently-disabled Send button. **Mid-session, a
+  sandbox reset wiped the local checkout** (no push access, so local
+  commits were the only record) — caught it immediately, reconstructed
+  all 3 phases from the exact diffs still visible in this same
+  conversation's transcript, re-verified identically, and exported
+  each phase to outputs immediately after committing it this time
+  (see the detailed section above and the new Active Tasks item about
+  this risk for future sessions). One recovery mistake (a commit
+  message claiming tasks.md was checked off when it hadn't been) was
+  caught on re-verification and fixed in an honest follow-up commit.
+  Verified via node --check, full test suite after each phase
+  (161/161 non-deferred passing throughout), and headless-jsdom smoke
+  tests using real simulated input events + DOM observation (all
+  deleted after use, run before the reset). Checked off Frontend
+  sections in all 3 tasks.md files. Not pushed — no git credentials
+  in this environment.
 - **2026-07-21 (Code Reviewer — Heroes/Dungeons sign-off, tasks
   3.1-3.5):** Explicit instruction this session: fresh clone, don't
   reuse any local copy — done (`git clone` from scratch, confirmed

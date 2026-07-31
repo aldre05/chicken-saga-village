@@ -27,12 +27,44 @@
       (150) once all 10 houses are unlocked and maxed
 
 ## Code Reviewer
-- [ ] 3.1 Verify house_6 genuinely requires Town Hall 6 (not
+- [x] 3.1 Verify house_6 genuinely requires Town Hall 6 (not
       buildable early via some gap in the gating logic)
-- [ ] 3.2 Verify Town Hall level 10 is a real hard cap (upgrade
+      (2026-07-30: scripted — for all 5 new houses [house_6-10]:
+      `UNLOCK_CONFIG[id].requiresTownHall` matches design.md exactly;
+      `meetsTownHallRequirement` correctly false one level below,
+      true at exactly the required level; `canUnlockBuilding` false
+      one level below even given 1,000,000 of every resource [isolates
+      the TH-level gate specifically, ruling out "it only looks gated
+      because nobody could afford it yet"]; exact unlock costs
+      cross-checked against design.md's table for all 5.)
+- [x] 3.2 Verify Town Hall level 10 is a real hard cap (upgrade
       button correctly disables/hides past level 10)
-- [ ] 3.3 Standard verification: syntax, full import-graph trace,
+      (2026-07-30: scripted — `canUpgrade` returns false at level 10
+      even given 1,000,000,000 of every resource; `getUpgradeCost`
+      returns null at level 10 [no cost-table entry for key 10, since
+      9 is correctly the last "upgrading FROM" key]; confirmed the cap
+      is exactly AT 10 and doesn't over-block — level 9->10 is
+      genuinely allowed. Also cross-checked all 9 `UPGRADE_COSTS`
+      table entries against design.md exactly, and confirmed
+      `HOUSE_IDS`'s generic downstream logic
+      [`isHouseMaxed`/`canUpgradeBuilding`/`getUpgradeCost`] actually
+      extends correctly to house_6-10, not just house_1-5 — and
+      computed the population-cap math directly [10 houses x 15
+      capacity = 150] rather than trusting design.md's claim
+      unverified.)
+- [x] 3.3 Standard verification: syntax, full import-graph trace,
       `npm test`
+      (2026-07-30: `node --check` on all 22 `js/*.js` files — clean.
+      Import-graph trace via `import()` on every file individually —
+      only expected failure was `main.js` hitting `document is not
+      defined` at its first DOM call, after full graph linking
+      succeeded [no stale-import regressions anywhere in the graph].
+      Full suite: 161/161 non-deferred tests passing, same 3
+      pre-existing/deliberately-deferred failures as prior sessions [2
+      dungeon partial-credit tests + 1 crafting resource-reference
+      test — both explicitly Documentation & Testing's job to update
+      per `add-dungeon-failure`/`add-hero-classes`'s own tasks.md, not
+      reintroduced or worsened this session].)
 
 ## Documentation & Testing
 - [ ] 4.1 Update `openspec/specs/town-hall-progression/spec.md` and

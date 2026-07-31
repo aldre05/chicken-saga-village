@@ -9,8 +9,9 @@
 // their center far from their edges, so interactRadius could reach
 // some sides but not others depending on exactly where the player's
 // collision box stopped them. Edge distance is symmetric on all sides
-// regardless of building size.
-function distanceToRect(px, py, rect) {
+// regardless of building size. Exported so the click-to-open-panels
+// range check (main.js) reuses this instead of reimplementing it.
+export function distanceToRect(px, py, rect) {
   const closestX = Math.max(rect.x, Math.min(px, rect.x + rect.width));
   const closestY = Math.max(rect.y, Math.min(py, rect.y + rect.height));
   return Math.sqrt((px - closestX) ** 2 + (py - closestY) ** 2);

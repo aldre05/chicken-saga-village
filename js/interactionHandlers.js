@@ -238,7 +238,9 @@ export const HANDLERS = {
       const results = resolveReadyDungeons(gameState.heroes, gameState.resources, now);
       if (results.length > 0) {
         const summaries = results.map(r =>
-          `${r.hero.name}: ${r.success ? 'Success! Full reward.' : 'Partial credit.'} (+${formatCost(r.reward)}, +${r.xp} XP)`
+          r.success
+            ? `${r.hero.name}: Success! (+${formatCost(r.reward)}, +${r.xp} XP)`
+            : `${r.hero.name}: Failed and downed — needs healing before another mission.`
         );
         return { title: 'Dungeon Gate', text: `Missions resolved!\n${summaries.join('\n')}` };
       }

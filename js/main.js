@@ -2,7 +2,7 @@ import { MAP_COLS, MAP_ROWS, mapGrid, interactables } from './map.js';
 import { RENDERED_TILE_SIZE } from './tileConfig.js';
 import { createCamera } from './camera.js';
 import { createPlayer, updatePlayer, getPlayerCenter, PLAYER_SPRITE_SIZE } from './player.js';
-import { findNearestInteractable, createDialogueState, closeDialogue } from './interactions.js';
+import { findNearestInteractable, distanceToRect, createDialogueState, closeDialogue } from './interactions.js';
 import { renderFrame } from './render.js';
 import { loadGameState, saveGameState } from './gameState.js';
 import { HANDLERS, BUILDING_RESOURCE } from './interactionHandlers.js';
@@ -21,7 +21,8 @@ import {
 } from './luckyWheel.js';
 import {
   canRecruitHero, recruitHero, effectivePower, isHeroBusy, isHeroIdle, getHeroById,
-  RECRUIT_COST
+  RECRUIT_COST, HERO_CLASSES, EQUIPMENT_SLOTS, EQUIPMENT_ITEMS, canEquipItem, equipHero, unequipHero,
+  isDowned, getMaxHp, getHealCost, canHealHero, healHero, useHealPotion, canUseHealPotion, HEAL_POTION_ITEM_ID
 } from './heroes.js';
 import {
   DUNGEON_TIERS, DUNGEON_TIER_IDS, getDungeonTier, canSendHeroToDungeon, sendHeroToDungeon, resolveReadyDungeons
@@ -60,6 +61,7 @@ const heroRosterListEl = document.getElementById('heroRosterList');
 
 const dungeonPanelEl = document.getElementById('dungeonPanel');
 const dungeonTierListEl = document.getElementById('dungeonTierList');
+const dungeonRewardPreviewEl = document.getElementById('dungeonRewardPreview');
 const dungeonHeroListEl = document.getElementById('dungeonHeroList');
 const sendHeroBtn = document.getElementById('sendHeroBtn');
 const dungeonEntryCostEl = document.getElementById('dungeonEntryCost');
@@ -82,6 +84,15 @@ const wheelSpinBtn = document.getElementById('wheelSpinBtn');
 // Updated each frame by updateBuildingPanel() — buttons read this at
 // click time rather than needing to be recreated every frame.
 let currentTarget = null; // { kind: 'resource'|'house', resourceId?, buildingId, buildingObj }
+
+// Which building's panel is open — set by clicking its sprite or
+// pressing E while in range (both toggle: same building again closes
+// it). Replaces "walk into range" as the panel-visibility trigger
+// (add-click-to-open-panels). `nearest`/`findNearestInteractable`
+// still run every frame, but only drive the "Press E / click to
+// interact" prompt text now, not panel visibility — see
+// getSelectedInteractable() and updatePromptUI().
+let selectedBuildingId = null;
 
 // Dungeon Gate panel picker state — which tier and which idle hero
 // are currently selected. Reset to a safe default each render if the
@@ -124,11 +135,38 @@ const gameState = loadGameState();
 // Renders a cost dict as HTML, highlighting any resource the player
 // can't currently afford in red — makes shortfalls obvious at a glance
 // instead of requiring mental math against the HUD.
+// Icons for crafted inventory items that aren't raw resources
+// (RESOURCE_CONFIG only covers egg/feathers/wood/rice/stone/ore).
+// formatCostHTML below needs this fallback for any recipe whose cost
+// references an item id instead of a raw resource — e.g. Boots costs
+// plank, not a raw resource. Without this fallback,
+// `RESOURCE_CONFIG['plank'].icon` throws (RESOURCE_CONFIG['plank'] is
+// undefined), which would crash the crafting panel outright the
+// moment it tried to render Boots' recipe row.
+const ITEM_CONFIG = {
+  nest_charm: { icon: '🧿' }, basket: { icon: '🧺' }, chicken_feed: { icon: '🌰' },
+  plank: { icon: '🪵' }, brick: { icon: '🧱' }, ingot: { icon: '🔩' },
+  sword: { icon: '⚔️' }, bow: { icon: '🏹' }, staff: { icon: '🪄' },
+  armor: { icon: '🛡️' }, boots: { icon: '👢' }, heal_potion: { icon: '🧪' }
+};
+
+function iconFor(id) {
+  return RESOURCE_CONFIG[id]?.icon || ITEM_CONFIG[id]?.icon || '❔';
+}
+
+// Renders a cost dict as HTML, highlighting any resource/item the
+// player can't currently afford in red — makes shortfalls obvious at
+// a glance instead of requiring mental math against the HUD. A cost
+// id might be a raw resource (checked against gameState.resources) OR
+// a crafted inventory item like Boots' plank cost (checked against
+// gameState.inventory instead) — mirrors crafting.js's own
+// splitCost() logic for the same resource-vs-item distinction.
 function formatCostHTML(costDict) {
   return Object.entries(costDict).map(([id, amt]) => {
-    const short = gameState.resources.carried[id] < amt;
+    const have = RESOURCE_CONFIG[id] ? gameState.resources.carried[id] : (gameState.inventory[id] || 0);
+    const short = have < amt;
     const cls = short ? 'cost-insufficient' : '';
-    return `<span class="${cls}">${amt}${RESOURCE_CONFIG[id].icon}</span>`;
+    return `<span class="${cls}">${amt}${iconFor(id)}</span>`;
   }).join(' ');
 }
 
@@ -140,6 +178,13 @@ function formatRewardText(rewardDict) {
 
 updateResourceHud();
 
+// Buildings whose E-press has always opened a flavor-text dialogue
+// box rather than (or in addition to) a panel — that behavior is
+// explicitly unaffected by click-to-open-panels (design.md's
+// non-goals). Every other interactable's E-press now toggles
+// selectedBuildingId, same semantics as clicking it.
+const DIALOGUE_ONLY_ON_E = new Set(['farmer_npc', 'town_hall']);
+
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
   keys.add(e.code);
@@ -150,7 +195,13 @@ window.addEventListener('keydown', (e) => {
     } else {
       const center = getPlayerCenter(player);
       const nearest = findNearestInteractable(center, interactables);
-      if (nearest) handleInteract(nearest);
+      if (nearest) {
+        if (DIALOGUE_ONLY_ON_E.has(nearest.id)) {
+          handleInteract(nearest);
+        } else {
+          selectedBuildingId = (selectedBuildingId === nearest.id) ? null : nearest.id;
+        }
+      }
     }
   }
   if (e.code === 'Escape' && dialogueState.open) {
@@ -163,6 +214,36 @@ window.addEventListener('keydown', (e) => {
   }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.code));
+
+// Click-to-open panels: clicking a building's on-screen sprite opens
+// its panel (still gated by interactRadius — a click doesn't bypass
+// the "must be in range" rule, it just replaces walking-into-range as
+// the trigger). Clicking the same selected building again, or
+// clicking empty ground, closes the panel. Same toggle semantics as
+// the E-press handler above, and shares distanceToRect with it/with
+// findNearestInteractable rather than reimplementing range-checking.
+canvas.addEventListener('click', (e) => {
+  if (dialogueState.open) return; // dialogue box doesn't cover the whole canvas, so guard explicitly
+
+  const rect = canvas.getBoundingClientRect();
+  const worldX = e.clientX - rect.left + camera.x;
+  const worldY = e.clientY - rect.top + camera.y;
+
+  const clicked = interactables.find(obj =>
+    worldX >= obj.x && worldX <= obj.x + obj.width &&
+    worldY >= obj.y && worldY <= obj.y + obj.height
+  );
+  if (!clicked) {
+    selectedBuildingId = null;
+    return;
+  }
+
+  const center = getPlayerCenter(player);
+  const distance = distanceToRect(center.x, center.y, clicked);
+  if (distance > clicked.interactRadius) return; // out of range — ignore the click, don't deselect either
+
+  selectedBuildingId = (selectedBuildingId === clicked.id) ? null : clicked.id;
+});
 
 autoClaimBtn.addEventListener('click', () => {
   const now = Date.now();
@@ -254,12 +335,12 @@ function handleInteract(obj) {
   updateResourceHud();
 }
 
-function spawnFloatingPopup(text, worldX, worldY) {
+function spawnFloatingPopup(text, worldX, worldY, extraClass) {
   const screenX = worldX - camera.x;
   const screenY = worldY - camera.y;
 
   const popup = document.createElement('div');
-  popup.className = 'floating-popup';
+  popup.className = extraClass ? `floating-popup ${extraClass}` : 'floating-popup';
   popup.textContent = text;
   popup.style.left = screenX + 'px';
   popup.style.top = screenY + 'px';
@@ -465,7 +546,8 @@ function loop(now) {
   camera.follow(center.x, center.y);
 
   const nearest = findNearestInteractable(center, interactables);
-  updatePromptUI(nearest);
+  const selected = getSelectedInteractable(center);
+  updatePromptUI(nearest, selected);
   updateDialogueUI();
   updateResourceHud();
   updateLuckyWheelWidget();
@@ -475,13 +557,31 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-function updatePromptUI(nearest) {
+// Resolves selectedBuildingId to its live interactable object each
+// frame, range-checking against the player's current position and
+// auto-clearing the selection if they've walked out of range (per
+// design.md: "walked away ... hide panel, clear selectedBuildingId").
+// Returns null if nothing is selected, the id no longer matches any
+// interactable, or the player is out of range.
+function getSelectedInteractable(playerCenter) {
+  if (!selectedBuildingId) return null;
+  const obj = interactables.find(o => o.id === selectedBuildingId);
+  if (!obj) {
+    selectedBuildingId = null;
+    return null;
+  }
+  const distance = distanceToRect(playerCenter.x, playerCenter.y, obj);
+  if (distance > obj.interactRadius) {
+    selectedBuildingId = null;
+    return null;
+  }
+  return obj;
+}
+
+function updatePromptUI(nearest, selected) {
   if (dialogueState.open) {
     promptEl.classList.add('hidden');
-    updateBuildingPanel(null);
-    return;
-  }
-  if (nearest) {
+  } else if (nearest) {
     const resourceId = BUILDING_RESOURCE[nearest.id];
     if (resourceId) {
       if (!isBuildingUnlocked(gameState.buildingUnlocks, nearest.id)) {
@@ -497,32 +597,40 @@ function updatePromptUI(nearest) {
           const capMultiplier = getCapMultiplier(nearest.id, gameState.buildingLevels);
           const stored = Math.floor(getBuildingStored(gameState.resources, resourceId, Date.now(), assigned, rateMultiplier, capMultiplier));
           promptEl.textContent = stored > 0
-            ? `Press E to collect ${stored} ${RESOURCE_CONFIG[resourceId].name.toLowerCase()}`
-            : `Press E to interact with ${nearest.name}`;
+            ? `Press E or click to collect ${stored} ${RESOURCE_CONFIG[resourceId].name.toLowerCase()}`
+            : `Press E or click to interact with ${nearest.name}`;
         }
       }
     } else if (isHouse(nearest.id)) {
       if (!isBuildingUnlocked(gameState.buildingUnlocks, nearest.id)) {
         promptEl.textContent = `${nearest.name} — see requirements below`;
       } else {
-        promptEl.textContent = `Press E to interact with ${nearest.name}`;
+        promptEl.textContent = `Press E or click to interact with ${nearest.name}`;
       }
     } else {
-      promptEl.textContent = `Press E to interact with ${nearest.name}`;
+      promptEl.textContent = `Press E or click to interact with ${nearest.name}`;
     }
     promptEl.classList.remove('hidden');
   } else {
     promptEl.classList.add('hidden');
   }
 
-  updateBuildingPanel(nearest);
-  updateCraftingPanel(nearest);
-  updateHeroPanel(nearest);
-  updateDungeonPanel(nearest);
+  // Panels are selectedBuildingId-driven now, not proximity-driven —
+  // `selected` is already range-checked/auto-cleared by
+  // getSelectedInteractable(). Force null while a dialogue is open so
+  // a panel can never be left visibly stuck open behind/alongside a
+  // dialogue box (can genuinely happen here since Barracks/Dungeon
+  // Gate sit close enough to Town Hall that a player could stay in
+  // both interactRadius zones at once).
+  const panelTarget = dialogueState.open ? null : selected;
+  updateBuildingPanel(panelTarget);
+  updateCraftingPanel(panelTarget);
+  updateHeroPanel(panelTarget);
+  updateDungeonPanel(panelTarget);
 }
 
-function updateCraftingPanel(nearest) {
-  const showPanel = nearest && nearest.id === 'workbench' && !dialogueState.open && isBuildingUnlocked(gameState.buildingUnlocks, 'workbench');
+function updateCraftingPanel(target) {
+  const showPanel = target && target.id === 'workbench' && isBuildingUnlocked(gameState.buildingUnlocks, 'workbench');
 
   if (!showPanel) {
     craftingPanelEl.classList.add('hidden');
@@ -551,7 +659,7 @@ function updateCraftingPanel(nearest) {
         spawnFloatingPopup(`Crafted ${recipe.name}! 🔨`, player.x + PLAYER_SPRITE_SIZE / 2, player.y);
       }
       updateResourceHud();
-      updateCraftingPanel(nearest);
+      updateCraftingPanel(target);
     });
 
     row.appendChild(info);
@@ -563,9 +671,113 @@ function updateCraftingPanel(nearest) {
 }
 
 const HERO_RARITY_ICON = { common: '⚪', rare: '🔵', epic: '🟣' };
+const HERO_CLASS_ICON = { warrior: '🗡️', archer: '🏹', scholar: '📖' };
 
-function updateHeroPanel(nearest) {
-  const showPanel = nearest && nearest.id === 'barracks' && !dialogueState.open && isBuildingUnlocked(gameState.buildingUnlocks, 'barracks');
+// Which hero's row is expanded to show its management panel (heal /
+// potion / equip / unequip) — null means none expanded. Click a row
+// to toggle; only one at a time, same single-selection spirit as
+// selectedDungeonTierId/selectedHeroId below.
+let selectedRosterHeroId = null;
+
+function buildHeroManagePanel(hero, target) {
+  const panel = document.createElement('div');
+  panel.className = 'hero-manage-panel';
+
+  // --- Heal (downed only) ---
+  if (isDowned(hero)) {
+    const healRow = document.createElement('div');
+    healRow.className = 'hero-manage-heal-row';
+    const healCost = getHealCost(hero);
+    const healBtn = document.createElement('button');
+    healBtn.className = 'hero-manage-heal-btn';
+    healBtn.textContent = 'Heal';
+    healBtn.disabled = !canHealHero(hero, gameState.resources);
+    healBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ok = healHero(hero, gameState.resources);
+      if (ok) spawnFloatingPopup(`${hero.name} healed! ❤️`, barracksObj.x + barracksObj.width / 2, barracksObj.y);
+      updateResourceHud();
+      updateHeroPanel(target);
+    });
+    const healCostEl = document.createElement('span');
+    healCostEl.className = 'hero-manage-heal-cost';
+    healCostEl.innerHTML = formatCostHTML(healCost);
+    healRow.appendChild(healBtn);
+    healRow.appendChild(healCostEl);
+    panel.appendChild(healRow);
+  } else if (canUseHealPotion(hero, gameState.inventory)) {
+    // --- Heal Potion (any non-downed hero below max HP) ---
+    const potionRow = document.createElement('div');
+    potionRow.className = 'hero-manage-potion-row';
+    const potionBtn = document.createElement('button');
+    potionBtn.className = 'hero-manage-potion-btn';
+    potionBtn.textContent = 'Use Heal Potion';
+    potionBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const ok = useHealPotion(hero, gameState.inventory);
+      if (ok) spawnFloatingPopup(`${hero.name} used a Heal Potion! 🧪`, barracksObj.x + barracksObj.width / 2, barracksObj.y);
+      updateResourceHud();
+      updateHeroPanel(target);
+    });
+    const potionCount = document.createElement('span');
+    potionCount.className = 'hero-manage-potion-count';
+    potionCount.textContent = `(${gameState.inventory[HEAL_POTION_ITEM_ID] || 0} in inventory)`;
+    potionRow.appendChild(potionBtn);
+    potionRow.appendChild(potionCount);
+    panel.appendChild(potionRow);
+  }
+
+  // --- Equipment, per slot ---
+  const equipSection = document.createElement('div');
+  equipSection.className = 'hero-manage-equipment';
+  for (const slot of EQUIPMENT_SLOTS) {
+    const slotRow = document.createElement('div');
+    slotRow.className = 'hero-manage-slot-row';
+
+    const equippedId = hero.equipment[slot];
+    const label = document.createElement('span');
+    label.className = 'hero-manage-slot-label';
+    label.textContent = equippedId ? `${slot}: ${iconFor(equippedId)} ${equippedId}` : `${slot}: Empty`;
+    slotRow.appendChild(label);
+
+    if (equippedId) {
+      const unequipBtn = document.createElement('button');
+      unequipBtn.className = 'hero-manage-slot-btn';
+      unequipBtn.textContent = 'Unequip';
+      unequipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        unequipHero(hero, gameState.inventory, slot);
+        updateHeroPanel(target);
+      });
+      slotRow.appendChild(unequipBtn);
+    }
+
+    // Offer every item in inventory that fits this slot + this hero's
+    // class, not already equipped in this slot.
+    for (const [itemId, itemCfg] of Object.entries(EQUIPMENT_ITEMS)) {
+      if (itemCfg.slot !== slot) continue;
+      if (itemId === equippedId) continue;
+      if (!canEquipItem(hero, gameState.inventory, itemId)) continue;
+      const equipBtn = document.createElement('button');
+      equipBtn.className = 'hero-manage-slot-btn';
+      equipBtn.textContent = `Equip ${iconFor(itemId)} ${itemId.charAt(0).toUpperCase()}${itemId.slice(1)}`;
+      equipBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        equipHero(hero, gameState.inventory, itemId);
+        updateHeroPanel(target);
+      });
+      slotRow.appendChild(equipBtn);
+    }
+
+    equipSection.appendChild(slotRow);
+  }
+  panel.appendChild(equipSection);
+
+  return panel;
+}
+
+function updateHeroPanel(target) {
+  const showPanel = target && target.id === 'barracks' && isBuildingUnlocked(gameState.buildingUnlocks, 'barracks');
 
   if (!showPanel) {
     heroPanelEl.classList.add('hidden');
@@ -585,23 +797,43 @@ function updateHeroPanel(nearest) {
     heroRosterListEl.appendChild(empty);
   } else {
     for (const hero of gameState.heroes.roster) {
-      const row = document.createElement('div');
-      row.className = 'hero-roster-row';
+      const downed = isDowned(hero);
+      const expanded = selectedRosterHeroId === hero.id;
+
+      const row = document.createElement('button');
+      row.className = 'hero-roster-row' + (downed ? ' hero-roster-row-downed' : '') + (expanded ? ' hero-roster-row-expanded' : '');
+      row.addEventListener('click', () => {
+        selectedRosterHeroId = expanded ? null : hero.id;
+        updateHeroPanel(target);
+      });
 
       const power = Math.round(effectivePower(hero));
+      const equipIcons = EQUIPMENT_SLOTS.map(slot => hero.equipment[slot] ? iconFor(hero.equipment[slot]) : '').filter(Boolean).join(' ');
       const info = document.createElement('div');
       info.className = 'hero-roster-info';
-      info.innerHTML = `<span class="hero-roster-name">${HERO_RARITY_ICON[hero.rarity]} ${hero.name}</span>` +
-        `<span class="hero-roster-stats">Lv.${hero.level} · ⚔️${power} power</span>`;
+      info.innerHTML = `<span class="hero-roster-name">${HERO_RARITY_ICON[hero.rarity]} ${HERO_CLASS_ICON[hero.class]} ${hero.name}</span>` +
+        `<span class="hero-roster-stats">Lv.${hero.level} · ⚔️${power} power${equipIcons ? ' · ' + equipIcons : ''}</span>`;
 
       const busy = isHeroBusy(hero, now);
       const status = document.createElement('span');
-      status.className = busy ? 'hero-roster-status hero-status-busy' : 'hero-roster-status hero-status-idle';
-      status.textContent = busy ? `${formatDuration(hero.busyUntil - now)} left` : 'Idle';
+      if (downed) {
+        status.className = 'hero-roster-status hero-status-downed';
+        status.textContent = '💀 Downed';
+      } else if (busy) {
+        status.className = 'hero-roster-status hero-status-busy';
+        status.textContent = `${formatDuration(hero.busyUntil - now)} left`;
+      } else {
+        status.className = 'hero-roster-status hero-status-idle';
+        status.textContent = 'Idle';
+      }
 
       row.appendChild(info);
       row.appendChild(status);
       heroRosterListEl.appendChild(row);
+
+      if (expanded) {
+        heroRosterListEl.appendChild(buildHeroManagePanel(hero, target));
+      }
     }
   }
 
@@ -619,8 +851,8 @@ recruitBtn.addEventListener('click', () => {
   updateResourceHud();
 });
 
-function updateDungeonPanel(nearest) {
-  const showPanel = nearest && nearest.id === 'dungeon_gate' && !dialogueState.open && isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate');
+function updateDungeonPanel(target) {
+  const showPanel = target && target.id === 'dungeon_gate' && isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate');
 
   if (!showPanel) {
     dungeonPanelEl.classList.add('hidden');
@@ -638,20 +870,29 @@ function updateDungeonPanel(nearest) {
     btn.innerHTML = `${tier.label}<span class="dungeon-tier-meta">⚔️${tier.difficulty} needed</span>`;
     btn.addEventListener('click', () => {
       selectedDungeonTierId = tierId;
-      updateDungeonPanel(nearest);
+      updateDungeonPanel(target);
     });
     dungeonTierListEl.appendChild(btn);
   }
 
   const selectedTier = getDungeonTier(selectedDungeonTierId);
   dungeonEntryCostEl.innerHTML = formatCostHTML(selectedTier.entryCost);
+  dungeonRewardPreviewEl.innerHTML = `Reward: ${formatCostHTML(selectedTier.fullReward)} <span class="dungeon-reward-xp">+${selectedTier.fullXp}XP</span>`;
 
   // --- Idle hero picker --- (busy heroes can't be sent, so they're
   // not offered here — the roster panel at the Barracks is where
-  // busy/idle status for every hero, not just idle ones, is visible)
-  const idleHeroes = gameState.heroes.roster.filter(h => isHeroIdle(h, now));
-  if (selectedHeroId && !idleHeroes.some(h => h.id === selectedHeroId)) selectedHeroId = null;
-  if (!selectedHeroId && idleHeroes.length > 0) selectedHeroId = idleHeroes[0].id;
+  // busy/idle status for every hero, not just idle ones, is visible.
+  // Downed heroes are excluded too, not just Send-disabled once
+  // picked: isHeroIdle alone doesn't account for isDowned (a downed
+  // hero's busyUntil is cleared on resolution, so it reads as
+  // "idle"), and listing a downed hero here — worse, auto-selecting
+  // it as the default pick — would show it as apparently sendable
+  // with no visible reason the Send button is disabled. Heal it at
+  // the Barracks first; this panel only offers heroes that can
+  // actually go.)
+  const sendableHeroes = gameState.heroes.roster.filter(h => isHeroIdle(h, now) && !isDowned(h));
+  if (selectedHeroId && !sendableHeroes.some(h => h.id === selectedHeroId)) selectedHeroId = null;
+  if (!selectedHeroId && sendableHeroes.length > 0) selectedHeroId = sendableHeroes[0].id;
 
   dungeonHeroListEl.innerHTML = '';
   if (gameState.heroes.roster.length === 0) {
@@ -659,20 +900,23 @@ function updateDungeonPanel(nearest) {
     empty.className = 'dungeon-hero-empty';
     empty.textContent = 'No heroes recruited — visit the Barracks first.';
     dungeonHeroListEl.appendChild(empty);
-  } else if (idleHeroes.length === 0) {
+  } else if (sendableHeroes.length === 0) {
+    const anyDowned = gameState.heroes.roster.some(isDowned);
     const empty = document.createElement('div');
     empty.className = 'dungeon-hero-empty';
-    empty.textContent = 'All heroes are on a mission.';
+    empty.textContent = anyDowned
+      ? 'Every idle hero is downed — heal at the Barracks first.'
+      : 'All heroes are on a mission.';
     dungeonHeroListEl.appendChild(empty);
   } else {
-    for (const hero of idleHeroes) {
+    for (const hero of sendableHeroes) {
       const power = Math.round(effectivePower(hero));
       const btn = document.createElement('button');
       btn.className = 'dungeon-hero-btn' + (hero.id === selectedHeroId ? ' selected' : '');
       btn.innerHTML = `${hero.name}<span class="dungeon-hero-power">⚔️${power}</span>`;
       btn.addEventListener('click', () => {
         selectedHeroId = hero.id;
-        updateDungeonPanel(nearest);
+        updateDungeonPanel(target);
       });
       dungeonHeroListEl.appendChild(btn);
     }
@@ -711,27 +955,30 @@ function resolvePendingDungeons() {
 
   const anchor = dungeonGateObj || barracksObj;
   results.forEach((r, i) => {
-    const text = r.success
-      ? `✅ ${r.hero.name}: ${formatRewardText(r.reward)} +${r.xp}XP`
-      : `⚠️ ${r.hero.name}: partial credit ${formatRewardText(r.reward)} +${r.xp}XP`;
-    spawnFloatingPopup(text, anchor.x + anchor.width / 2, anchor.y - i * 18);
+    if (r.success) {
+      const text = `✅ ${r.hero.name}: ${formatRewardText(r.reward)} +${r.xp}XP`;
+      spawnFloatingPopup(text, anchor.x + anchor.width / 2, anchor.y - i * 18);
+    } else {
+      const text = `💀 ${r.hero.name}: Downed! No reward.`;
+      spawnFloatingPopup(text, anchor.x + anchor.width / 2, anchor.y - i * 18, 'floating-popup-failure');
+    }
   });
   updateResourceHud();
 }
 
-function updateBuildingPanel(nearest) {
-  if (!nearest || dialogueState.open) {
+function updateBuildingPanel(target) {
+  if (!target) {
     panelEl.classList.add('hidden');
     currentTarget = null;
     return;
   }
 
-  const resourceId = BUILDING_RESOURCE[nearest.id];
-  const isHouseBuilding = isHouse(nearest.id);
-  const isTownHall = nearest.id === 'town_hall';
-  const isWorkbench = nearest.id === 'workbench';
-  const isBarracks = nearest.id === 'barracks';
-  const isDungeonGate = nearest.id === 'dungeon_gate';
+  const resourceId = BUILDING_RESOURCE[target.id];
+  const isHouseBuilding = isHouse(target.id);
+  const isTownHall = target.id === 'town_hall';
+  const isWorkbench = target.id === 'workbench';
+  const isBarracks = target.id === 'barracks';
+  const isDungeonGate = target.id === 'dungeon_gate';
 
   if (!resourceId && !isHouseBuilding && !isTownHall && !isWorkbench && !isBarracks && !isDungeonGate) {
     panelEl.classList.add('hidden');
@@ -739,15 +986,15 @@ function updateBuildingPanel(nearest) {
     return;
   }
 
-  const buildingId = nearest.id;
-  panelNameEl.textContent = nearest.name;
+  const buildingId = target.id;
+  panelNameEl.textContent = target.name;
 
   // --- Locked: show requirements + an Unlock button, same pattern as
   // upgrading. Applies to resource buildings, houses, Workbench,
   // Barracks, and Dungeon Gate — Town Hall has no lock state, it's
   // always available. ---
   if (!isTownHall && !isBuildingUnlocked(gameState.buildingUnlocks, buildingId)) {
-    currentTarget = { kind: 'locked', buildingId, buildingObj: nearest };
+    currentTarget = { kind: 'locked', buildingId, buildingObj: target };
 
     const unlockCfg = UNLOCK_CONFIG[buildingId];
     panelLevelEl.textContent = '🔒 Locked';
@@ -773,7 +1020,7 @@ function updateBuildingPanel(nearest) {
   upgradeBtn.textContent = 'Upgrade';
 
   if (isTownHall) {
-    currentTarget = { kind: 'townhall', buildingId, buildingObj: nearest };
+    currentTarget = { kind: 'townhall', buildingId, buildingObj: target };
 
     const level = gameState.townHall.level;
     panelLevelEl.textContent = `Lv.${level}`;
@@ -816,7 +1063,7 @@ function updateBuildingPanel(nearest) {
   panelLevelEl.textContent = `Lv.${level}`;
 
   if (isHouseBuilding) {
-    currentTarget = { kind: 'house', buildingId, buildingObj: nearest };
+    currentTarget = { kind: 'house', buildingId, buildingObj: target };
 
     const capacity = getHouseCapacity(buildingId, gameState.buildingLevels);
     panelRateEl.textContent = `👷 Houses ${capacity} workers`;
@@ -835,7 +1082,7 @@ function updateBuildingPanel(nearest) {
       upgradePreviewEl.innerHTML = `${formatCostHTML(upgradeCost)} → ${nextCapacity} workers`;
     }
   } else {
-    currentTarget = { kind: 'resource', resourceId, buildingId, buildingObj: nearest };
+    currentTarget = { kind: 'resource', resourceId, buildingId, buildingObj: target };
 
     const cfg = RESOURCE_CONFIG[resourceId];
     const assigned = gameState.workers.assignments[resourceId];

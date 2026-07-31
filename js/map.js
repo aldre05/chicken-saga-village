@@ -157,6 +157,41 @@ export const interactables = [
     col: 12, row: 17, tileWidth: 2, tileHeight: 2,
     color: '#9c6a4a', dialogue: "The last house — for now."
   }),
+  // add-th10-houses: 5 more, same 2x2 footprint/pattern as above.
+  // house_6/7/8 mirror house_1/3/5's column (c9-10) shifted 3 cols
+  // west (c6-7) — same row triplet (11-12 / 14-15 / 17-18), clear of
+  // the pond (c3-7, r3-6 — different rows) and the vertical path
+  // (col15 — different col). house_9/10 go east of the Town Hall
+  // cluster instead (c17-21 is already full) — checked against the
+  // decorative tree spots at [16,23]/[17,24] (house_10 shifted to
+  // c25-26 specifically to clear the [16,23] tree it would otherwise
+  // overlap at c23) and against woodshed/mine's resource-cluster
+  // footprints (different rows, no overlap).
+  makeInteractable({
+    id: 'house_6', name: 'House 6',
+    col: 6, row: 11, tileWidth: 2, tileHeight: 2,
+    color: '#9c6a4a', dialogue: "Still growing."
+  }),
+  makeInteractable({
+    id: 'house_7', name: 'House 7',
+    col: 6, row: 14, tileWidth: 2, tileHeight: 2,
+    color: '#9c6a4a', dialogue: "Word's getting around about this place."
+  }),
+  makeInteractable({
+    id: 'house_8', name: 'House 8',
+    col: 6, row: 17, tileWidth: 2, tileHeight: 2,
+    color: '#9c6a4a', dialogue: "The village is really taking shape."
+  }),
+  makeInteractable({
+    id: 'house_9', name: 'House 9',
+    col: 23, row: 12, tileWidth: 2, tileHeight: 2,
+    color: '#9c6a4a', dialogue: "Nearly a proper town now."
+  }),
+  makeInteractable({
+    id: 'house_10', name: 'House 10',
+    col: 25, row: 15, tileWidth: 2, tileHeight: 2,
+    color: '#9c6a4a', dialogue: "The final house. Quite the village you've built."
+  }),
   makeInteractable({
     id: 'farmer_npc', name: 'Farmer Joe',
     col: 13, row: 9, tileWidth: 1, tileHeight: 1,

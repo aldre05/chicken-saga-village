@@ -288,3 +288,30 @@ export function grantXp(hero, amount) {
     hero.xp = 0; // nothing left to progress toward once capped
   }
 }
+
+// Heal Potion is a consumable inventory item (crafted at the
+// Workbench, see crafting.js's RECIPES), not an equipment slot item —
+// design.md's Equipment Items table deliberately excludes it. There
+// was no function to actually consume one and apply its effect; the
+// Frontend's task 2.4 (consumable-use UI) needs exactly this, so
+// adding it here rather than duplicating heal-application logic in
+// main.js. Restores currentHp to max like healHero(), but costs one
+// heal_potion from inventory instead of egg/feathers, and (per
+// design.md's Heal Potion behavior) works on ANY hero below max HP,
+// not just downed ones -- healHero()/canHealHero() are specifically
+// gated on isDowned, which would incorrectly block using a potion on
+// a hero that's merely injured but not yet at 0 HP.
+export const HEAL_POTION_ITEM_ID = 'heal_potion';
+
+export function canUseHealPotion(hero, inventoryState) {
+  return (inventoryState[HEAL_POTION_ITEM_ID] || 0) >= 1 && hero.currentHp < getMaxHp(hero);
+}
+
+// Returns true if the potion was used, false if there wasn't one in
+// inventory or the hero was already at max HP (nothing to heal).
+export function useHealPotion(hero, inventoryState) {
+  if (!canUseHealPotion(hero, inventoryState)) return false;
+  inventoryState[HEAL_POTION_ITEM_ID] -= 1;
+  hero.currentHp = getMaxHp(hero);
+  return true;
+}

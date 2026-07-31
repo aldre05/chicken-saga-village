@@ -295,13 +295,28 @@ export function grantXp(hero, amount) {
 // was no function to actually consume one and apply its effect; the
 // Frontend's task 2.4 (consumable-use UI) needs exactly this, so
 // adding it here rather than duplicating heal-application logic in
-// main.js. Restores currentHp to max like healHero(), but costs one
-// heal_potion from inventory instead of egg/feathers, and (per
-// design.md's Heal Potion behavior) works on ANY hero below max HP,
-// not just downed ones -- healHero()/canHealHero() are specifically
-// gated on isDowned, which would incorrectly block using a potion on
-// a hero that's merely injured but not yet at 0 HP.
+// main.js. Restores 25% of max HP (additive, capped at max) — per
+// design.md's table entry "Heal Potion (25%)" and its own Risk note
+// distinguishing it from the paid Barracks heal: "potion = quick
+// partial heal, Barracks paid heal = full restore". Works on ANY
+// hero below max HP, not just downed ones -- healHero()/canHealHero()
+// are specifically gated on isDowned, which would incorrectly block
+// using a potion on a hero that's merely injured but not yet at 0 HP.
+//
+// CODE REVIEW NOTE (2026-07-30): this previously set currentHp
+// straight to max (a full heal), contradicting design.md's explicit
+// "25%" spec and its own stated rationale for why the potion and the
+// Barracks heal should feel different (a cheap 10-rice item fully
+// outclassing the rarity-scaled paid heal). Fixed to the additive
+// 25%-of-max formula. Note this does mean a downed hero (currentHp 0)
+// can be brought back above 0 via a potion for far less than the
+// Barracks heal cost -- design.md's own Risks/Open Questions section
+// already flags potion-vs-paid-heal overlap as something to confirm
+// during playtesting, so this is left as-is rather than additionally
+// gating potion use against isDowned (that would be inventing a rule
+// design.md doesn't state, not fixing a clear deviation from one).
 export const HEAL_POTION_ITEM_ID = 'heal_potion';
+export const HEAL_POTION_RESTORE_FRACTION = 0.25;
 
 export function canUseHealPotion(hero, inventoryState) {
   return (inventoryState[HEAL_POTION_ITEM_ID] || 0) >= 1 && hero.currentHp < getMaxHp(hero);
@@ -312,6 +327,7 @@ export function canUseHealPotion(hero, inventoryState) {
 export function useHealPotion(hero, inventoryState) {
   if (!canUseHealPotion(hero, inventoryState)) return false;
   inventoryState[HEAL_POTION_ITEM_ID] -= 1;
-  hero.currentHp = getMaxHp(hero);
+  const maxHp = getMaxHp(hero);
+  hero.currentHp = Math.min(maxHp, hero.currentHp + Math.ceil(maxHp * HEAL_POTION_RESTORE_FRACTION));
   return true;
 }

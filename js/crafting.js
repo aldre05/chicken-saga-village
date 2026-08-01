@@ -22,7 +22,20 @@ export const RECIPES = [
   { id: 'staff',       name: 'Staff',       cost: { wood: 10, stone: 10 } },
   { id: 'armor',       name: 'Armor',       cost: { ore: 10, stone: 10 } },
   { id: 'boots',       name: 'Boots',       cost: { plank: 3, feathers: 5 } },
-  { id: 'heal_potion', name: 'Heal Potion', cost: { rice: 10 } }
+  { id: 'heal_potion', name: 'Heal Potion', cost: { rice: 10 } },
+  // Dungeon Key — openspec/changes/add-dungeon-keys/. Cost is a
+  // DELIBERATE DEVIATION from design.md's suggested
+  // { wood: 20, stone: 20, ore: 10 } (industrial-lane-only): the
+  // developer explicitly asked for a high cost spanning ALL 6
+  // resources, specifically to give egg/feathers/rice a crafting-time
+  // sink too, not just wood/stone/ore. Roughly comparable in scale to
+  // a Town Hall 4->5 upgrade (a one-time cost), which is intentional
+  // — a key gates a repeatable action, so it needs to feel like a
+  // real, cross-resource investment each time, not a trivial tax.
+  // First-pass balance guess, flagged for playtesting like every
+  // other cost/multiplier guess in this project (see e.g.
+  // HEAL_COST_BASE in heroes.js).
+  { id: 'dungeon_key', name: 'Dungeon Key', cost: { egg: 40, feathers: 40, wood: 30, rice: 30, stone: 30, ore: 20 } }
 ];
 
 export function createInventoryState() {

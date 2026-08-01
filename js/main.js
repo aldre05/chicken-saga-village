@@ -496,7 +496,7 @@ function updateWheelModalInfo() {
 wheelSpinBtn.addEventListener('click', () => {
   if (wheelSpinning) return;
   const now = Date.now();
-  const reward = spinWheel(gameState.luckyWheel, gameState.resources, now, gameState.townHall.level);
+  const reward = spinWheel(gameState.luckyWheel, gameState.resources, gameState.inventory, gameState.heroes, now, gameState.townHall.level);
 
   if (!reward) {
     wheelResultTextEl.textContent = 'No tickets left!';
@@ -923,7 +923,7 @@ function updateDungeonPanel(target) {
   }
 
   const selectedHero = selectedHeroId ? getHeroById(gameState.heroes, selectedHeroId) : null;
-  sendHeroBtn.disabled = !canSendHeroToDungeon(selectedHero, selectedDungeonTierId, gameState.resources, now);
+  sendHeroBtn.disabled = !canSendHeroToDungeon(selectedHero, selectedDungeonTierId, gameState.resources, gameState.inventory, now);
 
   dungeonPanelEl.classList.remove('hidden');
 }
@@ -934,7 +934,7 @@ sendHeroBtn.addEventListener('click', () => {
   const tier = getDungeonTier(selectedDungeonTierId);
   if (!hero || !tier) return;
 
-  const ok = sendHeroToDungeon(hero, selectedDungeonTierId, gameState.resources, now);
+  const ok = sendHeroToDungeon(hero, selectedDungeonTierId, gameState.resources, gameState.inventory, now);
   spawnFloatingPopup(
     ok ? `${hero.name} sent to ${tier.label}! ⛩️` : "Can't send",
     dungeonGateObj.x + dungeonGateObj.width / 2, dungeonGateObj.y

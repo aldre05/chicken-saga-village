@@ -13,7 +13,7 @@ import { UNLOCK_CONFIG, isBuildingUnlocked, meetsTownHallRequirement } from './b
 import { getMaxWorkers, getRateMultiplier, getCapMultiplier, getHouseCapacity, isHouseMaxed, HOUSE_IDS } from './buildingLevels.js';
 import { getReadyToClaimQuests, getAvailableQuests, claimQuest } from './questBoard.js';
 import { isHeroIdle, isDowned, getHeroById, healHero, getHealCost } from './heroes.js';
-import { resolveReadyDungeons } from './dungeons.js';
+import { resolveReadyDungeons, DUNGEON_KEY_ITEM_ID } from './dungeons.js';
 
 // Maps a resource-producing building's id to which resource it produces.
 export const BUILDING_RESOURCE = {
@@ -251,9 +251,13 @@ export const HANDLERS = {
 
       const idleCount = gameState.heroes.roster.filter(h => isHeroIdle(h, now)).length;
       const busyCount = gameState.heroes.roster.length - idleCount;
+      const keyCount = gameState.inventory[DUNGEON_KEY_ITEM_ID] || 0;
+      const keyText = keyCount === 0
+        ? ' No Dungeon Keys — craft one at the Workbench or win one from the Lucky Wheel before sending anyone.'
+        : ` ${keyCount} Dungeon Key${keyCount === 1 ? '' : 's'} available.`;
       return {
         title: 'Dungeon Gate',
-        text: `${idleCount} idle, ${busyCount} on a mission. Use the panel below to send an idle hero.`
+        text: `${idleCount} idle, ${busyCount} on a mission.${keyText} Use the panel below to send an idle hero.`
       };
     }
   }

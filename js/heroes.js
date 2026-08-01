@@ -106,26 +106,16 @@ export function canRecruitHero(resourceState) {
   return canAfford(resourceState, RECRUIT_COST);
 }
 
-// Returns the newly created hero object, or null if unaffordable.
-// Rarity is rolled with the same weighted-pick algorithm the Lucky
-// Wheel uses (imported from luckyWheel.js, not reimplemented here).
-//
-// NOTE ON DATA MODEL: design.md's persistence section lists a hero as
-// { id, name, rarity, level, xp, busyUntil }. That's enough to know
-// *whether* a hero is busy, but resolving a mission (dungeons.js)
-// also needs to know *which tier* it was sent on. Rather than add a
-// separate "dungeon state" (design.md explicitly says not to), this
-// adds one extra nullable field, `dungeonTier`, alongside `busyUntil`
-// on the hero object itself — same spirit as keeping busy/idle status
-// on the hero, just enough to make resolution possible. Flagging this
-// as a deliberate, minimal deviation from the doc's exact field list
-// for the next session/reviewer.
-export function recruitHero(rosterState, resourceState) {
-  if (!canRecruitHero(resourceState)) return null;
-  spendResources(resourceState, RECRUIT_COST);
-
+// Pure hero-construction logic, no cost involved — split out per
+// openspec/changes/add-recruit-via-lucky-wheel/design.md so the
+// Lucky Wheel's hero-reward branch (see luckyWheel.js's spinWheel())
+// can create a hero without going through recruitHero()'s resource
+// spend (the wheel spin already consumed a ticket to get here;
+// charging RECRUIT_COST on top would double-charge). Exported since
+// luckyWheel.js needs to call it directly.
+export function createRolledHero() {
   const picked = pickWeighted(RARITY_TABLE);
-  const hero = {
+  return {
     id: makeHeroId(),
     name: pickRandomName(picked.rarity),
     rarity: picked.rarity,
@@ -137,6 +127,37 @@ export function recruitHero(rosterState, resourceState) {
     currentHp: RARITY_BY_ID[picked.rarity].hp,
     equipment: { weapon: null, armor: null, boots: null }
   };
+}
+
+// Returns the newly created hero object, or null if unaffordable.
+//
+// NOTE ON DATA MODEL: design.md's persistence section lists a hero as
+// { id, name, rarity, level, xp, busyUntil }. That's enough to know
+// *whether* a hero is busy, but resolving a mission (dungeons.js)
+// also needs to know *which tier* it was sent on. Rather than add a
+// separate "dungeon state" (design.md explicitly says not to), this
+// adds one extra nullable field, `dungeonTier`, alongside `busyUntil`
+// on the hero object itself — same spirit as keeping busy/idle status
+// on the hero, just enough to make resolution possible. Flagging this
+// as a deliberate, minimal deviation from the doc's exact field list
+// for the next session/reviewer.
+//
+// STILL HAS REAL CALLERS as of add-recruit-via-lucky-wheel: grepped
+// the whole repo (js/ and test/) before touching this per that
+// change's task 1.1 — Barracks' recruit button in main.js is being
+// removed by that change's Frontend task, but heroes.test.js and
+// dungeons.test.js both call recruitHero() directly and rely on its
+// exact existing cost-charging behavior. NOT dead code yet; kept as
+// a thin wrapper around createRolledHero() (same object shape,
+// guaranteed never to drift out of sync with the wheel's hero
+// reward) rather than deleted. See that change's task 1.3 note below
+// for the dead-code question this raises for RECRUIT_COST/
+// canRecruitHero specifically (not this function).
+export function recruitHero(rosterState, resourceState) {
+  if (!canRecruitHero(resourceState)) return null;
+  spendResources(resourceState, RECRUIT_COST);
+
+  const hero = createRolledHero();
   rosterState.roster.push(hero);
   return hero;
 }

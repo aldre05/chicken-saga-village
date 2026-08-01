@@ -32,26 +32,40 @@ export const DUNGEON_TIERS = {
 
 export const DUNGEON_TIER_IDS = Object.keys(DUNGEON_TIERS);
 
+// The consumable required to send any hero on any tier, per
+// openspec/changes/add-dungeon-keys/design.md. Spent at send time
+// regardless of mission outcome (deliberate — see Resolution section
+// of design.md: the scarcity/risk is in committing the key, same
+// spirit as entryCost already being non-refundable on failure).
+export const DUNGEON_KEY_ITEM_ID = 'dungeon_key';
+
 export function getDungeonTier(tierId) {
   return DUNGEON_TIERS[tierId] || null;
 }
 
-export function canSendHeroToDungeon(hero, tierId, resourceState, now) {
+// Signature change, not additive-only: both this and
+// sendHeroToDungeon gain a required inventoryState param (see
+// design.md, same precedent as add-hero-classes' getCraftableRecipes
+// change) — needed to check/spend the key.
+export function canSendHeroToDungeon(hero, tierId, resourceState, inventoryState, now) {
   const tier = getDungeonTier(tierId);
   if (!hero || !tier) return false;
   if (!isHeroIdle(hero, now)) return false;
   if (isDowned(hero)) return false;
+  if ((inventoryState[DUNGEON_KEY_ITEM_ID] || 0) < 1) return false;
   return canAfford(resourceState, tier.entryCost);
 }
 
-// Deducts entry cost and marks the hero busy until the mission
-// resolves. Returns true if the hero was sent, false otherwise (busy
-// hero, unaffordable, or unknown tier id) — caller should check
-// canSendHeroToDungeon first if it needs to distinguish why.
-export function sendHeroToDungeon(hero, tierId, resourceState, now) {
-  if (!canSendHeroToDungeon(hero, tierId, resourceState, now)) return false;
+// Deducts entry cost AND one dungeon key, then marks the hero busy
+// until the mission resolves. Returns true if the hero was sent,
+// false otherwise (busy hero, downed, no key, unaffordable, or
+// unknown tier id) — caller should check canSendHeroToDungeon first
+// if it needs to distinguish why.
+export function sendHeroToDungeon(hero, tierId, resourceState, inventoryState, now) {
+  if (!canSendHeroToDungeon(hero, tierId, resourceState, inventoryState, now)) return false;
   const tier = getDungeonTier(tierId);
   spendResources(resourceState, tier.entryCost);
+  inventoryState[DUNGEON_KEY_ITEM_ID] -= 1;
   hero.busyUntil = now + tier.durationMs;
   hero.dungeonTier = tierId;
   return true;

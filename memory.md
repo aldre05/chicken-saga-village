@@ -1842,3 +1842,160 @@ application), not meant to live in the repo.
   reports should be re-confirmed by the developer (hard refresh +
   console check) before anyone spends Backend time on them — they may
   not be live bugs at all.
+- **2026-08-01 (Backend Engineer — Dungeon Keys, tasks 1.1-1.5)**:
+  Fresh clone confirmed live state (repeating this every session per
+  standing instruction). Confirmed the prior session's 5 stale
+  `openspec/changes/` deletions did land this time. Two new proposals
+  found (`add-dungeon-keys`, `add-recruit-via-lucky-wheel`); developer
+  confirmed implementation order (keys first, matching memory.md's own
+  recommendation) and the two open questions design.md flagged rather
+  than guessing:
+  - **Starting key supply: 0** (first key must be crafted or won).
+  - **`dungeon_key` crafting cost: developer explicitly overrode
+    design.md's suggested `{wood:20, stone:20, ore:10}`**, asking for
+    a high cost spanning all 6 resources instead, specifically to
+    give egg/feathers/rice crafting-time utility too. Implemented as
+    `{egg:40, feathers:40, wood:30, rice:30, stone:30, ore:20}`
+    (~190 total, roughly TH4→5-upgrade scale — deliberately heavy
+    since it gates a *repeatable* action, not a one-time purchase).
+    **Flagging a real side effect of this choice, not silently
+    absorbed:** rice and ore both require Town Hall 5 to unlock, but
+    Dungeon Gate itself unlocks at TH4 — so a player who just reached
+    TH4 cannot craft any key, and therefore cannot send a hero to
+    *any* tier (including Easy), until they reach TH5. This is a
+    direct, mechanical consequence of "all 6 resources," not a bug —
+    but worth the developer knowing explicitly in case a full TH
+    level of Dungeon Gate being unusable isn't the intended pacing.
+  Implemented all 5 tasks: `crafting.js` (`dungeon_key` recipe, cost
+  as above); `luckyWheel.js` (`dungeon_key` REWARD_TABLE entry at
+  design.md's specified weight 5; `spinWheel()` given a resource-vs-
+  item branch using the same `RESOURCE_IDS`-membership test
+  `crafting.js`'s `splitCost()` already uses, confirming design.md's
+  flagged assumption — `spinWheel()` really did unconditionally write
+  to `resourceState.carried` before this, which would have corrupted
+  `resourceState.carried.dungeon_key` as `NaN` the first time anyone
+  landed on it; also exempted item rewards from the TH-level reward-
+  scaling multiplier, since "1.75 keys" isn't a coherent reward —
+  verified this matters concretely: at TH8's ~2.5-4.5x scale range, an
+  unscaled key reward stayed exactly 1-per-landing across 500 forced
+  spins in simulation, where the old scaling math would have handed
+  out 3-4 keys per lucky spin and undermined the entire scarcity goal
+  of this change); `dungeons.js` (`DUNGEON_KEY_ITEM_ID` export,
+  `canSendHeroToDungeon`/`sendHeroToDungeon` signature change +
+  key check/spend, `resolveDungeon`/`resolveReadyDungeons` correctly
+  left untouched per design.md — resolution doesn't change).
+  Updated all 3 real call sites in `main.js` (2x
+  send/canSend, 1x spinWheel) for the signature changes.
+  **Proactive addition beyond the literal task list** (flagging, not
+  hiding): added a dungeon-key count line to the Dungeon Gate's E-key
+  walkup panel text in `interactionHandlers.js`, following this
+  file's own established pattern of surfacing blocking state (same as
+  Barracks' downed-hero count) — not explicitly assigned to Backend
+  this time (Frontend's 2.1 owns the actual Send-panel key display),
+  but low-risk and consistent; flagging in case it overlaps with what
+  Frontend builds rather than complementing it.
+  **Verification:** `node --check` on all 5 touched files. Full suite:
+  196/213 (17 failures, all confined to `dungeons.test.js`/
+  `luckyWheel.test.js` — old positional-arg call sites now silently
+  misaligned by the signature changes, plus 1 stale invariant test
+  ("every REWARD_TABLE entry references a known resource") hitting
+  the same expected-deviation pattern as the earlier Boots case;
+  *expected* fallout per design.md, Documentation & Testing's 4.1/4.2,
+  deliberately not touched here). Functional simulation (thrown away
+  after use, and re-verified in isolation after the combined script's
+  own test-code bugs — not implementation bugs — produced 2 false
+  negatives on `console.assert`, which doesn't halt execution the way
+  a real assertion would): confirmed 0 keys blocks sending even with
+  an idle, healthy, overpowered hero and unlimited raw resources;
+  crafting a key deducts the exact all-6-resource cost; sending
+  consumes exactly 1 key and the pre-existing `entryCost` is deducted
+  completely independently (both gates active, neither replaces the
+  other, confirmed with a clean single-hero trace after the earlier
+  false negative); the reward-table entry exists at the right
+  weight/amount and lands in `inventoryState`, never
+  `resourceState.carried`.
+  **Not done (out of scope for Backend Engineer):** Dungeon panel key-
+  count display near entry cost, Send-button 0-key clear-reason
+  verification, Workbench recipe row (Frontend 2.1-2.3); 0-key/
+  consumption/entryCost-independence sign-off, standard verification
+  (Code Reviewer 3.1-3.4); updating the 17 now-stale
+  dungeons.test.js/luckyWheel.test.js call sites, new 0-key/
+  consumption tests, spec updates (Documentation & Testing 4.1-4.4).
+  Files modified: `js/crafting.js`, `js/luckyWheel.js`,
+  `js/dungeons.js`, `js/main.js`, `js/interactionHandlers.js`.
+  **Next backend task:** `add-recruit-via-lucky-wheel` — developer
+  confirmed this is next, per the requested order. Task 1.2 there
+  explicitly says to coordinate with (not duplicate) this session's
+  resource-vs-item branching in `spinWheel()` if both land close
+  together, which they are.
+- **2026-08-01 (Backend Engineer — Recruit via Lucky Wheel, tasks
+  1.1-1.3)**: Second of the two-proposal sequence (dungeon-keys done
+  above, same session). Implemented all 3 backend tasks in
+  `openspec/changes/add-recruit-via-lucky-wheel/tasks.md`:
+  - `heroes.js`: split hero-object construction out of `recruitHero()`
+    into a new exported `createRolledHero()` (0 params, no cost, no
+    resource/roster access — pure). Per task 1.1's explicit
+    instruction, grepped the whole repo before assuming Barracks was
+    the only caller — it wasn't: `heroes.test.js` and
+    `dungeons.test.js` both call `recruitHero()` directly. Kept
+    `recruitHero()`'s exact existing signature/behavior, reimplemented
+    as a thin wrapper (cost check + spend + `createRolledHero()` +
+    push) so it can't drift out of sync with the wheel's hero-reward
+    shape and doesn't break either test file.
+  - `luckyWheel.js`: added the `hero` REWARD_TABLE entry (weight 4,
+    per design.md exactly) and a hero branch in `spinWheel()`, sharing
+    one conditional chain with the existing resource/item branches
+    from the dungeon-keys work rather than a second parallel
+    implementation, per task 1.2's explicit "coordinate, don't
+    duplicate" instruction. Required a new `rosterState` param on
+    `spinWheel()` — updated its one real call site in `main.js`.
+    **This creates a circular import** (`heroes.js` already imports
+    `pickWeighted` from `luckyWheel.js`; now `luckyWheel.js` also
+    imports `createRolledHero` from `heroes.js`) — didn't just assume
+    ES module circular imports work here, verified empirically at
+    runtime (both sides only ever use the import inside a function
+    body, never at top-level module evaluation, which is exactly the
+    condition under which Node's ESM circular-import resolution is
+    safe).
+  - Task 1.3 (dead-code check on `RECRUIT_COST`/`canRecruitHero`):
+    **not literally dead code** even after Frontend removes the
+    Barracks button — `recruitHero()` (which still has real test
+    callers) depends on both internally. What actually goes away is
+    their *production-UI* reachability specifically. Flagged for
+    Documentation & Testing to decide between (a) keeping
+    `recruitHero()`/`RECRUIT_COST`/`canRecruitHero` as supported
+    legacy internals for test convenience, or (b) refactoring
+    `heroes.test.js`/`dungeons.test.js` to call `createRolledHero()`
+    directly and then genuinely removing all three. Deliberately not
+    decided unilaterally, per the task's own explicit instruction.
+  **Verification:** `node --check` on all 3 touched files (`heroes.js`,
+  `luckyWheel.js`, `main.js`). Full suite: still 196/213, the *same*
+  17 pre-existing failures as after the dungeon-keys work earlier this
+  session — confirmed by diffing the failing-test list, zero new
+  failures introduced by this proposal's changes. Functional
+  simulation (thrown away after use, this time with a real
+  process.exit(1) pass/fail gate rather than the earlier
+  console.assert-only script that silently let 2 self-inflicted false
+  negatives through) covered: `createRolledHero()` shape matches
+  every field a hero needs and costs nothing; `recruitHero()` verified
+  unchanged for its remaining callers (still rejects at 0 resources,
+  still charges exactly `RECRUIT_COST`, still pushes to roster,
+  produces the identical object shape as a rolled hero); 2000
+  simulated spins against a real `spinWheel()` call correctly produced
+  actual hero objects, pushed each one to `rosterState.roster`
+  (roster length matched landing count exactly), spent zero resources
+  across any hero-reward spin, and coexisted cleanly with resource and
+  dungeon-key-item rewards landing in the same run.
+  **Not done (out of scope for Backend Engineer):** Barracks button
+  removal, Lucky Wheel hero-result popup, roster-panel "how did I get
+  heroes now" messaging (Frontend 2.x); sign-off on the recruit-cost
+  removal / hero-branch correctness, standard verification (Code
+  Reviewer 3.x); updating/removing recruitHero()-dependent tests per
+  the 1.3 dead-code decision, new hero-reward-branch tests, spec
+  updates, `chicken-saga-village`'s own README/onboarding text if it
+  mentions the old paid-recruit flow (Documentation & Testing 4.x).
+  Files modified: `js/heroes.js`, `js/luckyWheel.js`, `js/main.js`.
+  **Next backend task:** none queued — both proposals in the
+  requested order (dungeon-keys, then recruit-via-lucky-wheel) are
+  now backend-complete. No other `openspec/changes/` proposals remain
+  as of this session.

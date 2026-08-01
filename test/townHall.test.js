@@ -74,4 +74,17 @@ describe('townHall.js', () => {
     assert.equal(state.level, MAX_TOWN_HALL_LEVEL);
     assert.equal(upgrades, MAX_TOWN_HALL_LEVEL - 1);
   });
+
+  test('MAX_TOWN_HALL_LEVEL is pinned at 10 (add-th10-houses) -- catches an accidental change to the cap itself', () => {
+    assert.equal(MAX_TOWN_HALL_LEVEL, 10);
+  });
+
+  test('UPGRADE_COSTS levels 7-9 (add-th10-houses) match design.md exactly', () => {
+    assert.deepEqual(UPGRADE_COSTS[7], { egg: 250, feathers: 200, wood: 220, rice: 160, stone: 140, ore: 60 });
+    assert.deepEqual(UPGRADE_COSTS[8], { egg: 400, feathers: 320, wood: 350, rice: 260, stone: 220, ore: 120 });
+    assert.deepEqual(UPGRADE_COSTS[9], { egg: 650, feathers: 520, wood: 560, rice: 420, stone: 360, ore: 220 });
+    // Key 9 is the cost to reach level 10 (the max) -- there should be
+    // no key 10, matching the table's "cost FROM this level" convention.
+    assert.equal(UPGRADE_COSTS[10], undefined);
+  });
 });

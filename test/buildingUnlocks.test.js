@@ -81,4 +81,24 @@ describe('buildingUnlocks.js', () => {
       }
     }
   });
+
+  test('house_6 through house_10 (add-th10-houses) match design.md\'s table exactly (Town Hall gate + cost)', () => {
+    const expected = {
+      house_6: { requiresTownHall: 6, cost: { egg: 150, feathers: 100 } },
+      house_7: { requiresTownHall: 7, cost: { egg: 220, feathers: 150 } },
+      house_8: { requiresTownHall: 8, cost: { egg: 320, feathers: 220 } },
+      house_9: { requiresTownHall: 9, cost: { egg: 450, feathers: 300 } },
+      house_10: { requiresTownHall: 10, cost: { egg: 600, feathers: 420 } }
+    };
+    for (const [id, cfg] of Object.entries(expected)) {
+      assert.deepEqual(UNLOCK_CONFIG[id], cfg, `${id} doesn't match design.md`);
+    }
+  });
+
+  test('house_6 genuinely requires Town Hall 6 -- not unlockable one level early even with unlimited resources (isolates the TH gate from affordability)', () => {
+    const resources = createResourceState();
+    for (const id of ['egg', 'feathers', 'wood', 'rice', 'stone', 'ore']) resources.carried[id] = 1_000_000;
+    assert.equal(canUnlockBuilding('house_6', 5, resources), false, 'one level below the gate, fully funded, should still fail');
+    assert.equal(canUnlockBuilding('house_6', 6, resources), true);
+  });
 });

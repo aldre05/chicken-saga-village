@@ -4,6 +4,15 @@ import {
   RARITY_TABLE,
   RECRUIT_COST,
   MAX_HERO_LEVEL,
+  HERO_CLASSES,
+  HERO_CLASS_IDS,
+  EQUIPMENT_SLOTS,
+  EQUIPMENT_ITEMS,
+  EQUIPMENT_POWER,
+  HEAL_COST_BASE,
+  HEAL_COST_RARITY_MULTIPLIER,
+  HEAL_POTION_ITEM_ID,
+  HEAL_POTION_RESTORE_FRACTION,
   getRarityStats,
   createHeroRosterState,
   canRecruitHero,
@@ -13,6 +22,16 @@ import {
   isHeroBusy,
   isHeroIdle,
   getHeroById,
+  getMaxHp,
+  isDowned,
+  getHealCost,
+  canHealHero,
+  healHero,
+  canEquipItem,
+  equipHero,
+  unequipHero,
+  canUseHealPotion,
+  useHealPotion,
   grantXp
 } from '../js/heroes.js';
 import { createResourceState } from '../js/resources.js';
@@ -71,6 +90,9 @@ describe('heroes.js', () => {
     assert.equal(hero.busyUntil, null);
     assert.equal(hero.dungeonTier, null);
     assert.ok(['common', 'rare', 'epic'].includes(hero.rarity));
+    assert.ok(HERO_CLASS_IDS.includes(hero.class));
+    assert.equal(hero.currentHp, getMaxHp(hero), 'a fresh hero should start at full HP for its rarity');
+    assert.deepEqual(hero.equipment, { weapon: null, armor: null, boots: null });
     assert.equal(typeof hero.name, 'string');
     assert.ok(hero.id.startsWith('hero_'));
   });
@@ -202,6 +224,279 @@ describe('heroes.js', () => {
       assert.equal(isHeroIdle(hero, 5000), false, 'long after expiry but still unresolved: must not be sendable');
       hero.busyUntil = null; // simulates dungeons.js's resolveDungeon() clearing it
       assert.equal(isHeroIdle(hero, 5000), true);
+    });
+  });
+
+  describe('hero classes', () => {
+    test('HERO_CLASSES matches design.md exactly (3 classes, correct weapon types)', () => {
+      assert.deepEqual(HERO_CLASS_IDS.sort(), ['archer', 'scholar', 'warrior']);
+      assert.equal(HERO_CLASSES.warrior.weaponType, 'sword');
+      assert.equal(HERO_CLASSES.archer.weaponType, 'bow');
+      assert.equal(HERO_CLASSES.scholar.weaponType, 'staff');
+    });
+
+    test('class assignment is uniform random, NOT weighted like rarity (deterministic via mocked Math.random)', (t) => {
+      // 3 classes, uniform: each occupies an equal 1/3 slice of [0, 1).
+      const originalRandom = Math.random;
+      t.after(() => { Math.random = originalRandom; });
+      const cases = [
+        [0, HERO_CLASS_IDS[0]],
+        [0.34, HERO_CLASS_IDS[1]],
+        [0.67, HERO_CLASS_IDS[2]],
+        [0.99999, HERO_CLASS_IDS[2]]
+      ];
+      for (const [randomValue, expectedClass] of cases) {
+        Math.random = () => randomValue;
+        const roster = createHeroRosterState();
+        const hero = recruitHero(roster, fundedResources());
+        assert.equal(hero.class, expectedClass, `Math.random()=${randomValue} should yield class ${expectedClass}, got ${hero.class}`);
+      }
+    });
+
+    test('class distribution is roughly uniform (~33/33/33) over many rolls, independent of rarity weighting', () => {
+      const roster = createHeroRosterState();
+      const resources = fundedResources({ egg: 1_000_000, feathers: 1_000_000 });
+      const counts = { warrior: 0, archer: 0, scholar: 0 };
+      const N = 4000;
+      for (let i = 0; i < N; i++) {
+        const hero = recruitHero(roster, resources);
+        counts[hero.class] += 1;
+      }
+      for (const id of HERO_CLASS_IDS) {
+        assert.ok(Math.abs(counts[id] / N - 1 / 3) < 0.05, `${id} ratio off: ${counts[id] / N}`);
+      }
+    });
+  });
+
+  describe('equipment', () => {
+    test('EQUIPMENT_ITEMS matches design.md exactly (slot, class restriction, power)', () => {
+      assert.deepEqual(EQUIPMENT_SLOTS, ['weapon', 'armor', 'boots']);
+      assert.deepEqual(EQUIPMENT_ITEMS.sword, { slot: 'weapon', classRestriction: 'warrior', power: 8 });
+      assert.deepEqual(EQUIPMENT_ITEMS.bow, { slot: 'weapon', classRestriction: 'archer', power: 8 });
+      assert.deepEqual(EQUIPMENT_ITEMS.staff, { slot: 'weapon', classRestriction: 'scholar', power: 8 });
+      assert.deepEqual(EQUIPMENT_ITEMS.armor, { slot: 'armor', classRestriction: null, power: 6 });
+      assert.deepEqual(EQUIPMENT_ITEMS.boots, { slot: 'boots', classRestriction: null, power: 4 });
+    });
+
+    test('EQUIPMENT_POWER is derived correctly from EQUIPMENT_ITEMS', () => {
+      assert.equal(EQUIPMENT_POWER.sword, 8);
+      assert.equal(EQUIPMENT_POWER.armor, 6);
+      assert.equal(EQUIPMENT_POWER.boots, 4);
+    });
+
+    test('canEquipItem rejects all 6 wrong-class weapon/class mismatches, allows all 3 correct matches', () => {
+      const inventory = { sword: 1, bow: 1, staff: 1 };
+      const mismatches = [
+        ['warrior', 'bow'], ['warrior', 'staff'],
+        ['archer', 'sword'], ['archer', 'staff'],
+        ['scholar', 'sword'], ['scholar', 'bow']
+      ];
+      for (const [heroClass, itemId] of mismatches) {
+        const hero = { class: heroClass, equipment: { weapon: null, armor: null, boots: null } };
+        assert.equal(canEquipItem(hero, inventory, itemId), false, `${heroClass} should not be able to equip ${itemId}`);
+      }
+      const matches = [['warrior', 'sword'], ['archer', 'bow'], ['scholar', 'staff']];
+      for (const [heroClass, itemId] of matches) {
+        const hero = { class: heroClass, equipment: { weapon: null, armor: null, boots: null } };
+        assert.equal(canEquipItem(hero, inventory, itemId), true, `${heroClass} should be able to equip ${itemId}`);
+      }
+    });
+
+    test('canEquipItem: armor/boots are unrestricted across all 3 classes', () => {
+      const inventory = { armor: 1, boots: 1 };
+      for (const heroClass of HERO_CLASS_IDS) {
+        const hero = { class: heroClass, equipment: { weapon: null, armor: null, boots: null } };
+        assert.equal(canEquipItem(hero, inventory, 'armor'), true);
+        assert.equal(canEquipItem(hero, inventory, 'boots'), true);
+      }
+    });
+
+    test('canEquipItem rejects when the item isn\'t in inventory', () => {
+      const hero = { class: 'warrior', equipment: { weapon: null, armor: null, boots: null } };
+      assert.equal(canEquipItem(hero, {}, 'sword'), false);
+      assert.equal(canEquipItem(hero, { sword: 0 }, 'sword'), false);
+    });
+
+    test('equipHero consumes one from inventory and fills the correct slot', () => {
+      const hero = { class: 'warrior', equipment: { weapon: null, armor: null, boots: null } };
+      const inventory = { sword: 1 };
+      const result = equipHero(hero, inventory, 'sword');
+      assert.equal(result, true);
+      assert.equal(hero.equipment.weapon, 'sword');
+      assert.equal(inventory.sword, 0);
+    });
+
+    test('equipHero fails cleanly (no mutation) for a class-restricted mismatch', () => {
+      const hero = { class: 'archer', equipment: { weapon: null, armor: null, boots: null } };
+      const inventory = { sword: 1 };
+      const result = equipHero(hero, inventory, 'sword');
+      assert.equal(result, false);
+      assert.equal(hero.equipment.weapon, null);
+      assert.equal(inventory.sword, 1, 'inventory must be untouched on a rejected equip');
+    });
+
+    test('swapping equipment returns the previously-equipped item to inventory rather than destroying it', () => {
+      const hero = { class: 'warrior', equipment: { weapon: null, armor: null, boots: null } };
+      const inventory = { sword: 2, armor: 1 };
+      equipHero(hero, inventory, 'sword');
+      assert.equal(inventory.sword, 1);
+      // Equip a second sword into the same (weapon) slot -- the first should return to inventory.
+      equipHero(hero, inventory, 'sword');
+      assert.equal(hero.equipment.weapon, 'sword');
+      assert.equal(inventory.sword, 1, 'one sword consumed, one sword returned -- net unchanged, but via the return path not by skipping consumption');
+    });
+
+    test('unequipHero returns the item to inventory and clears the slot', () => {
+      const hero = { class: 'warrior', equipment: { weapon: 'sword', armor: null, boots: null } };
+      const inventory = { sword: 0 };
+      const result = unequipHero(hero, inventory, 'weapon');
+      assert.equal(result, true);
+      assert.equal(hero.equipment.weapon, null);
+      assert.equal(inventory.sword, 1);
+    });
+
+    test('unequipHero is a safe no-op on an already-empty slot', () => {
+      const hero = { class: 'warrior', equipment: { weapon: null, armor: null, boots: null } };
+      const inventory = {};
+      const result = unequipHero(hero, inventory, 'weapon');
+      assert.equal(result, false);
+      assert.deepEqual(inventory, {}, 'nothing should be added to inventory for an empty slot');
+    });
+
+    test('effectivePower sums bonuses across all 3 equipped slots, not just one', () => {
+      const hero = { rarity: 'common', level: 1, equipment: { weapon: null, armor: null, boots: null } };
+      const basePower = effectivePower(hero); // 15
+      const inventory = { sword: 1, armor: 1, boots: 1 };
+      hero.class = 'warrior';
+
+      equipHero(hero, inventory, 'sword');
+      assert.equal(effectivePower(hero), basePower + 8);
+      equipHero(hero, inventory, 'armor');
+      assert.equal(effectivePower(hero), basePower + 8 + 6);
+      equipHero(hero, inventory, 'boots');
+      assert.equal(effectivePower(hero), basePower + 8 + 6 + 4, 'all 3 slots should sum, not just the last one equipped');
+
+      unequipHero(hero, inventory, 'armor');
+      assert.equal(effectivePower(hero), basePower + 8 + 4, 'removing one slot should only drop that slot\'s bonus');
+    });
+
+    test('a fully-unequipped hero has no phantom equipment bonus', () => {
+      const hero = { rarity: 'rare', level: 1, equipment: { weapon: null, armor: null, boots: null } };
+      assert.equal(effectivePower(hero), getRarityStats('rare').basePower);
+    });
+  });
+
+  describe('downed state / healing', () => {
+    test('getMaxHp reflects the rarity table, independent of level', () => {
+      assert.equal(getMaxHp({ rarity: 'common', level: 1 }), 25);
+      assert.equal(getMaxHp({ rarity: 'common', level: 20 }), 25);
+      assert.equal(getMaxHp({ rarity: 'epic', level: 1 }), 55);
+    });
+
+    test('isDowned is true at/below 0 HP, false above it', () => {
+      assert.equal(isDowned({ currentHp: 1 }), false);
+      assert.equal(isDowned({ currentHp: 0 }), true);
+      assert.equal(isDowned({ currentHp: -5 }), true, 'defensively true even if HP somehow went negative');
+    });
+
+    test('getHealCost scales exactly by HEAL_COST_RARITY_MULTIPLIER for all 3 rarities', () => {
+      assert.deepEqual(getHealCost({ rarity: 'common' }), {
+        egg: HEAL_COST_BASE.egg * HEAL_COST_RARITY_MULTIPLIER.common,
+        feathers: HEAL_COST_BASE.feathers * HEAL_COST_RARITY_MULTIPLIER.common
+      });
+      assert.deepEqual(getHealCost({ rarity: 'rare' }), { egg: 60, feathers: 40 });
+      assert.deepEqual(getHealCost({ rarity: 'epic' }), { egg: 120, feathers: 80 });
+    });
+
+    test('canHealHero requires BOTH downed state AND affordability', () => {
+      const notDowned = { rarity: 'common', currentHp: 10 };
+      const downedButPoor = { rarity: 'common', currentHp: 0 };
+      assert.equal(canHealHero(notDowned, fundedResources()), false, 'not downed -- nothing to heal');
+      assert.equal(canHealHero(downedButPoor, createResourceState()), false, 'downed but can\'t afford it');
+      assert.equal(canHealHero(downedButPoor, fundedResources()), true);
+    });
+
+    test('healHero restores exactly to max HP and deducts the exact rarity-scaled cost', () => {
+      const hero = { rarity: 'epic', currentHp: 0 };
+      const resources = fundedResources();
+      const before = { ...resources.carried };
+      const result = healHero(hero, resources);
+      assert.equal(result, true);
+      assert.equal(hero.currentHp, getMaxHp(hero));
+      const cost = getHealCost(hero);
+      assert.equal(resources.carried.egg, before.egg - cost.egg);
+      assert.equal(resources.carried.feathers, before.feathers - cost.feathers);
+    });
+
+    test('healHero fails cleanly (no mutation) on a non-downed hero or when unaffordable', () => {
+      const notDowned = { rarity: 'common', currentHp: 20 };
+      const resources = fundedResources();
+      assert.equal(healHero(notDowned, resources), false);
+      assert.equal(notDowned.currentHp, 20);
+
+      const downedButPoor = { rarity: 'common', currentHp: 0 };
+      const poorResources = createResourceState();
+      assert.equal(healHero(downedButPoor, poorResources), false);
+      assert.equal(downedButPoor.currentHp, 0);
+    });
+  });
+
+  describe('Heal Potion (consumable, distinct from the paid Barracks heal)', () => {
+    test('HEAL_POTION_RESTORE_FRACTION is 0.25 per design.md ("Heal Potion (25%)")', () => {
+      assert.equal(HEAL_POTION_RESTORE_FRACTION, 0.25);
+    });
+
+    test('canUseHealPotion requires one in inventory AND the hero being below max HP', () => {
+      const injured = { rarity: 'common', currentHp: 10 };
+      const atMax = { rarity: 'common', currentHp: 25 };
+      assert.equal(canUseHealPotion(injured, {}), false, 'no potion in inventory');
+      assert.equal(canUseHealPotion(injured, { [HEAL_POTION_ITEM_ID]: 1 }), true);
+      assert.equal(canUseHealPotion(atMax, { [HEAL_POTION_ITEM_ID]: 1 }), false, 'nothing to heal at full HP');
+    });
+
+    test('useHealPotion restores an ADDITIVE 25% of max HP, not a full heal (regression: previously set HP straight to max)', () => {
+      const hero = { rarity: 'common', currentHp: 10 }; // maxHp 25, 25% of 25 = 6.25 -> ceil 7
+      const inventory = { [HEAL_POTION_ITEM_ID]: 1 };
+      const result = useHealPotion(hero, inventory);
+      assert.equal(result, true);
+      assert.equal(hero.currentHp, 17, '10 + ceil(25 * 0.25) = 10 + 7 = 17, NOT 25 (a full heal)');
+      assert.equal(inventory[HEAL_POTION_ITEM_ID], 0);
+    });
+
+    test('useHealPotion caps at max HP rather than overshooting', () => {
+      const hero = { rarity: 'common', currentHp: 22 }; // maxHp 25; +7 would overshoot to 29
+      const inventory = { [HEAL_POTION_ITEM_ID]: 1 };
+      useHealPotion(hero, inventory);
+      assert.equal(hero.currentHp, 25, 'should cap at maxHp, not overshoot');
+    });
+
+    test('useHealPotion is a no-op at full HP (nothing consumed, nothing changed)', () => {
+      const hero = { rarity: 'common', currentHp: 25 };
+      const inventory = { [HEAL_POTION_ITEM_ID]: 1 };
+      const result = useHealPotion(hero, inventory);
+      assert.equal(result, false);
+      assert.equal(hero.currentHp, 25);
+      assert.equal(inventory[HEAL_POTION_ITEM_ID], 1, 'potion should not be consumed on a no-op use');
+    });
+
+    test('useHealPotion works on a downed (0 HP) hero too -- not gated on isDowned, unlike the paid Barracks heal', () => {
+      // Deliberate design overlap, not a bug -- see design.md's own
+      // Risks/Open Questions flagging potion-vs-paid-heal overlap as
+      // something to confirm during playtesting. This test documents
+      // the current, intentional behavior.
+      const hero = { rarity: 'common', currentHp: 0 };
+      const inventory = { [HEAL_POTION_ITEM_ID]: 1 };
+      const result = useHealPotion(hero, inventory);
+      assert.equal(result, true);
+      assert.equal(hero.currentHp, 7); // 0 + ceil(25 * 0.25)
+      assert.equal(isDowned(hero), false, 'a potion CAN bring a downed hero back above 0');
+    });
+
+    test('useHealPotion fails cleanly with no potion in inventory', () => {
+      const hero = { rarity: 'common', currentHp: 10 };
+      const result = useHealPotion(hero, {});
+      assert.equal(result, false);
+      assert.equal(hero.currentHp, 10);
     });
   });
 });

@@ -185,4 +185,33 @@ describe('buildingLevels.js', () => {
     assert.equal(result, false);
     assert.equal(levels.house_1, MAX_HOUSE_LEVEL);
   });
+
+  test('HOUSE_IDS extends through house_10 (add-th10-houses)', () => {
+    assert.equal(HOUSE_IDS.length, 10);
+    for (let i = 6; i <= 10; i++) assert.ok(HOUSE_IDS.includes(`house_${i}`));
+  });
+
+  test('BASE_UPGRADE_COST for house_6 through house_10 matches design.md exactly ({egg: 15, feathers: 10} each)', () => {
+    for (let i = 6; i <= 10; i++) {
+      assert.deepEqual(BASE_UPGRADE_COST[`house_${i}`], { egg: 15, feathers: 10 }, `house_${i} base upgrade cost mismatch`);
+    }
+  });
+
+  test('house_6-10 extend the generic getMaxWorkers/getHouseCapacity/isHouseMaxed formulas exactly like house_1-5 (no per-house special-casing needed)', () => {
+    const levels = createBuildingLevelState();
+    for (let i = 6; i <= 10; i++) {
+      const id = `house_${i}`;
+      assert.equal(getHouseCapacity(id, levels), 3, `${id} base capacity should match house_1-5's formula`);
+      levels[id] = MAX_HOUSE_LEVEL;
+      assert.equal(getHouseCapacity(id, levels), MAX_HOUSE_CAPACITY);
+      assert.equal(isHouseMaxed(id, levels), true);
+    }
+  });
+
+  test('total village population cap with all 10 houses maxed is exactly 150 (10 x MAX_HOUSE_CAPACITY)', () => {
+    const levels = createBuildingLevelState();
+    for (const id of HOUSE_IDS) levels[id] = MAX_HOUSE_LEVEL;
+    const totalCapacity = HOUSE_IDS.reduce((sum, id) => sum + getHouseCapacity(id, levels), 0);
+    assert.equal(totalCapacity, 150);
+  });
 });

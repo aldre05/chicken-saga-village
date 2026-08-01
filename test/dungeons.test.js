@@ -20,10 +20,12 @@ function fundedResources(overrides = {}) {
   return resources;
 }
 
-// Rarity base powers from heroes.js's RARITY_TABLE (see heroes.test.js
-// for the derivation): common 15, rare 25, epic 41.
-function heroOf(rarity, level = 1) {
-  return { id: `h_${rarity}_${level}`, rarity, level, xp: 0, busyUntil: null, dungeonTier: null };
+// Rarity base powers/hp from heroes.js's RARITY_TABLE (see
+// heroes.test.js for the derivation): common 15/25hp, rare 25/38hp,
+// epic 41/55hp.
+const RARITY_HP = { common: 25, rare: 38, epic: 55 };
+function heroOf(rarity, level = 1, currentHp = RARITY_HP[rarity]) {
+  return { id: `h_${rarity}_${level}`, rarity, level, xp: 0, busyUntil: null, dungeonTier: null, currentHp };
 }
 
 describe('dungeons.js', () => {
@@ -158,7 +160,7 @@ describe('dungeons.js', () => {
       assert.equal(result.xp, DUNGEON_TIERS.hard.fullXp);
     });
 
-    test('one point below the difficulty boundary counts as PARTIAL CREDIT, not success', () => {
+    test('one point below the difficulty boundary counts as FAILURE, not success', () => {
       const hero = heroOf('rare', 9); // power 45, one level down should drop below 45
       hero.level = 8; // 25 * (1 + 7*0.1) = 25 * 1.7 = 42.5, below Hard's difficulty 45
       const resources = fundedResources();
@@ -168,7 +170,16 @@ describe('dungeons.js', () => {
       assert.equal(result.success, false);
     });
 
-    test('partial credit is exactly 50% of full reward, floored per-resource', () => {
+    // REGRESSION (add-dungeon-failure): this project's original design
+    // gave a failed mission 50% reward + 50% XP ("partial credit").
+    // That was a deliberate, explicit reversal — see
+    // openspec/specs/dungeon-system/spec.md and memory.md's Decisions
+    // for why (real risk on failure was worth more than a soft-fail
+    // safety net, once healing existed as the actual safety net
+    // instead). These tests replace the old
+    // "partial credit is exactly 50%..." tests, which asserted the
+    // now-removed behavior and would fail against current code.
+    test('failure grants NOTHING (empty reward, 0 xp) — no partial credit', () => {
       const hero = heroOf('common', 1); // power 15, well below Hard's difficulty 45
       const resources = fundedResources();
       const now = 1_700_000_000_000;
@@ -177,20 +188,38 @@ describe('dungeons.js', () => {
       const result = resolveDungeon(hero, resources, hero.busyUntil);
 
       assert.equal(result.success, false);
-      assert.deepEqual(result.reward, { egg: 125, feathers: 60, wood: 40, rice: 25 }); // floor(250/2), floor(120/2), floor(80/2), floor(50/2)
-      for (const [id, amount] of Object.entries(result.reward)) {
-        assert.equal(resources.carried[id], before[id] + amount);
-      }
+      assert.deepEqual(result.reward, {});
+      assert.equal(result.xp, 0);
+      assert.deepEqual(resources.carried, before, 'no resources should be granted on failure');
     });
 
-    test('partial-credit XP is floored, not rounded (Medium fullXp=25 -> 12, not 12.5 or 13)', () => {
+    test('failure sets currentHp to 0 (hero becomes downed), regardless of prior HP', () => {
       const hero = heroOf('common', 1); // power 15, below Medium's difficulty 25
       const resources = fundedResources();
       const now = 1_700_000_000_000;
       sendHeroToDungeon(hero, 'medium', resources, now);
       const result = resolveDungeon(hero, resources, hero.busyUntil);
       assert.equal(result.success, false);
-      assert.equal(result.xp, 12);
+      assert.equal(hero.currentHp, 0);
+    });
+
+    test('success does NOT modify currentHp (only failure does)', () => {
+      const hero = heroOf('rare', 1, 10); // power 25 >= Medium's 25 -> success; HP deliberately not at max
+      const resources = fundedResources();
+      const now = 1_700_000_000_000;
+      sendHeroToDungeon(hero, 'medium', resources, now);
+      const result = resolveDungeon(hero, resources, hero.busyUntil);
+      assert.equal(result.success, true);
+      assert.equal(hero.currentHp, 10, 'a successful mission should not heal or further damage the hero');
+    });
+
+    test('a downed hero cannot be sent on a mission even if otherwise idle and fully funded', () => {
+      const hero = heroOf('epic', 5, 0); // idle (never sent), but downed
+      const resources = fundedResources();
+      const now = Date.now();
+      assert.equal(canSendHeroToDungeon(hero, 'easy', resources, now), false);
+      assert.equal(sendHeroToDungeon(hero, 'easy', resources, now), false);
+      assert.equal(hero.busyUntil, null, 'a rejected send must not mutate the hero');
     });
 
     test('resolution clears busyUntil and dungeonTier so the hero becomes sendable again', () => {
@@ -203,6 +232,18 @@ describe('dungeons.js', () => {
       assert.equal(hero.dungeonTier, null);
     });
 
+    test('after a failed mission, the hero is idle (resolution cleared) but still not sendable until healed', () => {
+      const hero = heroOf('common', 1); // power 15, below Hard's difficulty 45 -> will fail
+      const resources = fundedResources();
+      const now = 1_700_000_000_000;
+      sendHeroToDungeon(hero, 'hard', resources, now);
+      const result = resolveDungeon(hero, resources, hero.busyUntil);
+      assert.equal(result.success, false);
+      assert.equal(hero.busyUntil, null, 'resolution should still clear busy state even on failure');
+      assert.equal(hero.dungeonTier, null);
+      assert.equal(hero.currentHp, 0);
+      assert.equal(canSendHeroToDungeon(hero, 'easy', resources, now), false, 'downed heroes cannot be sent even though idle');
+    });
     test('grants XP to the hero via the normal leveling path (a big enough reward can level the hero up)', () => {
       const hero = heroOf('rare', 1); // power 25 >= Medium's 25 -> success -> full XP 25 -> xpForNextLevel(1) is 20
       const resources = fundedResources();

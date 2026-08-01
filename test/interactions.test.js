@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  distanceToRect,
   findNearestInteractable,
   createDialogueState,
   openDialogue,
@@ -12,6 +13,42 @@ function rect(id, x, y, width, height, interactRadius) {
 }
 
 describe('interactions.js', () => {
+  // distanceToRect is exported specifically so main.js's click-to-open
+  // handler (add-click-to-open-panels) reuses this exact function for
+  // its range check instead of reimplementing edge-distance math —
+  // see interactions.js's own comment. Tested directly here since it's
+  // now public API, not just an internal helper of
+  // findNearestInteractable.
+  describe('distanceToRect (exported for main.js click-handler reuse)', () => {
+    test('is 0 for a point inside the rectangle', () => {
+      assert.equal(distanceToRect(50, 50, { x: 0, y: 0, width: 100, height: 100 }), 0);
+    });
+
+    test('measures to the nearest edge, not the center, for a point outside', () => {
+      const r = { x: 100, y: 100, width: 300, height: 300 };
+      // Directly left of the rect, vertically centered -- nearest edge is 10px away horizontally.
+      assert.equal(distanceToRect(90, 250, r), 10);
+    });
+
+    test('is symmetric on all 4 sides for the same offset distance', () => {
+      const r = { x: 100, y: 100, width: 100, height: 100 };
+      const left = distanceToRect(90, 150, r);
+      const right = distanceToRect(210, 150, r);
+      const top = distanceToRect(150, 90, r);
+      const bottom = distanceToRect(150, 210, r);
+      assert.equal(left, 10);
+      assert.equal(left, right);
+      assert.equal(left, top);
+      assert.equal(left, bottom);
+    });
+
+    test('uses true Euclidean distance from a corner, not axis-aligned distance', () => {
+      const r = { x: 0, y: 0, width: 100, height: 100 };
+      // 3px left, 4px above the top-left corner -> classic 3-4-5 triangle.
+      assert.equal(distanceToRect(-3, -4, r), 5);
+    });
+  });
+
   test('findNearestInteractable returns null when nothing is in range', () => {
     const objs = [rect('a', 1000, 1000, 50, 50, 10)];
     const result = findNearestInteractable({ x: 0, y: 0 }, objs);

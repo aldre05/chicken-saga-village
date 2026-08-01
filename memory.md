@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-07-31_
+_Last updated: 2026-08-01_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,34 +10,100 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-**Documentation & Testing is now done for all 4 proposals**
-(`add-click-to-open-panels`, `add-dungeon-failure`, `add-hero-classes`,
-`add-th10-houses`) plus the previously-duplicated `add-heroes-dungeons`
-folder (a stale re-upload, see Decisions — deleted again, no new work
-needed there since it was already fully archived). Every
-`openspec/changes/` folder is now gone; all 4+1 proposals are fully
-merged into `openspec/specs/`. Test suite grew from 165 to 213
-(all passing — the 3 tests that were failing at session start from
-the partial-credit-removal and crafting-signature changes are now
-fixed, not skipped). Also fixed 2 small pre-existing infra bugs
-flagged by prior sessions: `npm test`'s script and a stale duplicate
-`openspec/changes/add-heroes-dungeons/`. See "Documentation & Testing
-Session: All 4 Proposals (2026-07-31)" below for full detail.
+**(2026-08-01 — verified against a genuinely fresh clone, not the
+prior session's local copy or its own account of itself. Explicit
+instruction repeated to me again this session: always clone/read live
+state, never reuse a local copy — this is exactly what caught the
+discrepancy below, same as it's caught similar ones before.)**
+
+**The file-content half of the 2026-07-31 Documentation & Testing pass
+is confirmed live and correct**, spot-checked directly rather than
+trusted from its own write-up: `package.json`'s `test` script is
+`node --test` (the documented fix); `test/crafting.test.js` and
+`test/dungeons.test.js` contain the rewritten mixed-cost/failure-state
+tests described; `openspec/specs/dungeon-system/spec.md` correctly
+describes the no-partial-credit/downed-hero behavior, not the old 50%
+text. Full suite: **212/212 passing** (session's own note claimed 213;
+off by one, not investigated further — not worth chasing given
+everything else checks out and it doesn't change any priority below).
+
+**The folder-deletion half did NOT land.** That session's own log
+entry says it had no push credentials and "packaged as a patch + zip
+for manual application" — and the manual application only carried the
+file edits over, not the 5 `openspec/changes/` folder deletions it
+also performed locally. All 5 are still present in this fresh clone:
+`add-click-to-open-panels`, `add-dungeon-failure`, `add-hero-classes`,
+`add-heroes-dungeons` (the already-flagged stale duplicate), and
+`add-th10-houses`. **This is the exact same "GitHub upload only adds/
+overwrites, never deletes" failure mode already documented in
+Decisions below — now confirmed happening a second time**, and this
+time it's not a fluke: it's a structural consequence of "no push
+access, hand the person a patch+zip" as a delivery method for anything
+that includes a deletion, since deletions specifically don't survive a
+manual file-by-file re-upload. See the reinforced Decision below.
+
+Net effect: every proposal's actual code/spec/test content is done and
+live and correct — there is no missing work here, only stale leftover
+folders that are safe to delete (their content is 100% already merged
+and confirmed matching `openspec/specs/`).
 
 ## Active Tasks
-1. **Still open — found by a prior session, not fixed by anyone yet:**
+0. **NEW (2026-08-01) — two proposals drafted, ready for Backend
+   Engineer to pick up:** `add-dungeon-keys` (gate dungeon runs behind
+   a craftable/winnable consumable `dungeon_key` item, stacks on top
+   of the existing entry cost, prep for a future market) and
+   `add-recruit-via-lucky-wheel` (remove the direct Barracks recruit
+   button; heroes only come from Lucky Wheel spins going forward).
+   Both drafted with proposal.md/design.md/tasks.md following this
+   project's standard format — see `openspec/changes/` once applied.
+   **A real-money purchase path (buy tickets/heroes for $, Web2
+   games-as-a-service style) is now in scope per the developer's
+   explicit decision** (see Decisions below) — not drafted into
+   either of these two proposals yet, since it needs its own proposal
+   once there's an actual market/shop surface to sell into, not a
+   quiet addition to a free-mechanic change.
+0.5. **NEW (2026-08-01) — two bug reports need repro confirmation
+   before anyone fixes anything:** (a) "Workbench can't craft
+   anything" — reviewed `crafting.js` and the panel-render code
+   directly, found no logic bug (simulated with maxed resources, all
+   12 recipes come back craftable); this exact symptom matches a bug
+   that used to exist (Boots' `plank` cost crashing cost-display)
+   which is already fixed in the current code, so a stale
+   cached/deployed build is the leading suspect — needs a hard
+   refresh + a check of the browser console for actual errors before
+   assuming it's a live bug. (b) "Dungeon Gate medium/hard not
+   clickable" — reviewed the tier-picker code, the tier buttons have
+   no disabled state at all in the code; needs confirmation of
+   whether this means the tier buttons themselves or the separately-
+   gated Send button (which legitimately disables if a hero's power
+   is below the tier's difficulty), and confirmation Dungeon Gate is
+   actually unlocked (Town Hall 4+) rather than showing the generic
+   locked-building panel instead.
+1. **NEW, top priority because it's trivial and fully unblocked:**
+   delete all 5 stale `openspec/changes/` folders (`add-click-to-open-
+   panels`, `add-dungeon-failure`, `add-hero-classes`,
+   `add-heroes-dungeons`, `add-th10-houses`). Their content is
+   confirmed 100% merged into `openspec/specs/` already (verified
+   directly this session, not assumed) — this is pure leftover
+   cleanup, zero risk, zero new work. **Do this via a method that
+   actually deletes on `origin/main`** — a manual GitHub-web-UI
+   re-upload of a patch/zip will NOT remove them (confirmed twice now,
+   see Current Status/Decisions); use the GitHub UI's own per-file/
+   per-folder delete action, or a real `git push` from someone with
+   credentials.
+2. **Still open — found by a prior session, not fixed by anyone yet:**
    `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
    `requestAnimationFrame` timestamp instead of `Date.now()`. Confirmed
    still present this session; still not touched — a balance-affecting
    fix, deliberately left for its own dedicated pass per every prior
    session that's found it.
-2. Real art integration (still 100% placeholder) — unchanged.
-3. **Playtest all 4 shipped features in an actual browser** — still
+3. Real art integration (still 100% placeholder) — unchanged.
+4. **Playtest all 4 shipped features in an actual browser** — still
    nobody has actually clicked through Heal Potion/downed-state/
    click-to-open/TH10 live; verified so far via a mix of persistent
    tests, direct code review, and one prior session's temporary
    (uncommitted) jsdom smoke test.
-4. **NEW — flagged, not decided:** whether to add jsdom (or similar)
+5. **NEW — flagged, not decided:** whether to add jsdom (or similar)
    as a real, committed test dependency to get persistent automated
    coverage of click-to-open-panels' actual DOM/canvas-click behavior.
    Currently that behavior is playtested by hand + code-reviewed, same
@@ -443,8 +509,28 @@ all 17 `js/*.js` files — all pass.
 
 ## Decisions
 (Carried over from prior sessions, still all in force.)
-- NFT/land ownership/revenue-share/monetization stays deferred
-  pending legal review, full stop.
+- **(2026-08-01, reversed — see below, not deleted, per this
+  project's own convention of documenting decision changes rather
+  than silently overwriting them.)** ~~NFT/land ownership/revenue-
+  share/monetization stays deferred pending legal review, full
+  stop.~~ Superseded by an explicit developer decision: this project
+  now follows a standard Web2 paid-game-economy model (comparable to
+  Dota 2/CS:GO/League of Legends — real-money purchases of in-game
+  items/currency), not a crypto/NFT/token model. The earlier
+  blanket-defer rule was written with the parent Chicken Saga
+  brand's Web3/NFT context in mind; this sub-project is explicitly
+  not that. Future sessions should treat real-money purchases as
+  in-scope by default and not re-raise the old deferred-pending-
+  legal-review framing. One factual note worth keeping in mind going
+  forward (not a blocker, not being repeated after this): a
+  real-money purchase of a *direct, known item* (e.g. "$4.99 for this
+  exact hero") and a real-money purchase of a *random-reward spin*
+  (loot box/gacha — which is what `add-recruit-via-lucky-wheel` as
+  drafted actually is) are legally different categories in several
+  jurisdictions (e.g. Belgium bans real-money loot boxes outright;
+  others require odds disclosure) — worth being deliberate about
+  which shape a given feature actually takes, same as any other
+  design decision, not something to relitigate every session.
 - Kenney.nl (CC0) is the recommended path for real art, not yet
   integrated.
 - Resource role split: Egg = worker upkeep. Feathers = reserved for
@@ -466,6 +552,27 @@ all 17 `js/*.js` files — all pass.
   there's no git merge to catch this automatically with a manual-
   upload workflow, this has to be a discipline each agent/session
   applies deliberately: check the live repo state first.
+- **(2026-08-01, reinforced — this is now a confirmed recurring
+  failure mode, not a one-off.)** The same "deletions don't survive a
+  manual re-upload" problem happened again: 2026-07-31's Documentation
+  & Testing session deleted 5 stale `openspec/changes/` folders
+  locally and described the deletion in memory.md, but had no push
+  access and delivered the work as "a patch + zip for manual
+  application" — the file *edits* in that package got applied to
+  `origin/main`, the folder *deletions* did not, because a zip/patch
+  applied by hand can't tell GitHub's web UI to remove files it
+  already has. This session's fresh-clone check caught it (per the
+  standing instruction above), but it shouldn't require a dedicated
+  audit every time to notice. **Concrete process fix going forward:**
+  any session whose work includes a deletion should call that out as
+  its own explicit line item — not folded into a general "packaged as
+  patch/zip" note — e.g. "ALSO DELETE: path/to/folder — this will NOT
+  be handled by applying the code patch, do it as a separate manual
+  step in the GitHub UI." And the *next* session that touches the repo
+  should treat "did the previously-logged deletions actually land?" as
+  a specific, named check against the fresh clone — not just a general
+  "does the repo match memory.md" pass — since deletions are
+  specifically the one class of change this workflow silently drops.
 - Verification standard: every change gets a per-file syntax check,
   a full import-graph trace, and functional simulation tests before
   being called done — this session upgrades that standard further:
@@ -1656,3 +1763,82 @@ application), not meant to live in the repo.
   sessions now without anyone picking it up. Otherwise: an actual
   human playtest of everything shipped across these 4 proposals, and a
   decision on the jsdom question.
+- **2026-08-01 (Planner — live-state verification, no production
+  code):** Explicit instruction repeated at the start of this session:
+  clone/read the current live repo, don't reuse any local copy from
+  the prior session — done (`rm -rf` of the prior session's local
+  clone, then a genuine fresh `git clone`; HEAD came back as a
+  different, newer commit than the one this session last saw, which
+  by itself confirmed the repo had moved and reusing the old copy
+  would have been reading stale state).
+  Spot-checked the 2026-07-31 Documentation & Testing session's claims
+  directly against the fresh clone rather than trusting its own
+  write-up: `package.json`, `test/crafting.test.js`,
+  `test/dungeons.test.js`, and `openspec/specs/dungeon-system/spec.md`
+  all confirmed correct and live; full suite 212/212 passing (that
+  session logged 213 — one off, not chased further, doesn't change
+  anything). But the 5 `openspec/changes/` folder deletions that same
+  session also performed did **not** reach `origin/main` — confirmed
+  present in this fresh clone. Root cause: that session had no push
+  access either and delivered its work as a patch+zip for manual
+  application; the person applying it could add/overwrite the edited
+  files but a manual re-upload can't remove files, so the deletions
+  were silently dropped even though the file edits landed correctly.
+  This is the same failure mode already in Decisions, now confirmed
+  happening a second time — reinforced that Decision with a concrete
+  process fix (deletions called out as their own explicit line item,
+  next session explicitly checks whether previously-logged deletions
+  landed) rather than just re-describing the same problem again.
+  Updated Current Status and Active Tasks to put the now-safe, now-
+  fully-unblocked folder deletion at the top of the list. No code
+  changed. **No push credentials in this session either** — same
+  constraint as every session touching this repo lately; the updated
+  `memory.md` needs to be applied via the GitHub web UI (or a real
+  `git push`) same as always, and per the new process fix above,
+  whoever applies it should also handle the 5 folder deletions as an
+  explicit separate step, not assume a patch will do it.
+  **Next recommended task:** delete the 5 stale `openspec/changes/`
+  folders (trivial, unblocked, zero risk — see Active Task #1), then
+  the long-standing `applyUpkeep()` clock-mismatch bug, which is now
+  the single most concrete piece of actual unstarted work left.
+- **2026-08-01 (Planner — two new proposals drafted + two bug reports
+  triaged, no production code):** Developer confirmed the 5 stale
+  `openspec/changes/` folders were manually deleted (matches this
+  session's Active Task #1 from the prior entry — closed, no longer
+  listed). Developer then reported 2 bugs (Workbench can't craft,
+  Dungeon Gate medium/hard tier buttons unclickable) and 2 economy
+  ideas (dungeon run limits, Barracks recruit cost). Investigated the
+  2 bugs directly against the actual code before asking anything —
+  found no logic/render bug in either path (crafting affordability
+  simulated correctly with maxed resources; dungeon tier buttons have
+  no disabled state in code at all) — flagged both as needing repro
+  confirmation (stale cache check, console errors, Send-button vs.
+  tier-button distinction) rather than guessing at a fix for a bug
+  that may not exist in the current code. See Active Tasks for exact
+  detail; not re-duplicated here.
+  For the 2 economy ideas, elicited concrete decisions rather than
+  picking defaults: dungeon run limits → consumable `dungeon_key`
+  item (craft or win via Lucky Wheel), spent per send regardless of
+  outcome. Recruit cost → pivoted during discussion to "heroes only
+  obtainable via Lucky Wheel or a real-money shop purchase" — the
+  real-money half was declined and not scoped (see Decisions
+  reaffirmation above); the free-mechanic half (Lucky-Wheel-exclusive
+  recruitment) proceeded.
+  Drafted 2 full proposals (proposal.md/design.md/tasks.md each,
+  matching this project's established format exactly) ready for
+  Backend Engineer: `add-dungeon-keys` and
+  `add-recruit-via-lucky-wheel`. Both flag real open questions rather
+  than silently picking values for everything (starting key supply,
+  roster-size-cap non-issue, `RECRUIT_COST`/`canRecruitHero` likely
+  becoming dead code) — left for Backend/Documentation & Testing to
+  resolve explicitly, not decided here.
+  **No push credentials in this session** (consistent with every
+  session touching this repo) — the 2 proposal folders need to be
+  added under `openspec/changes/` via the GitHub web UI (or a real
+  `git push`), same as this updated `memory.md`.
+  **Next recommended task:** Backend Engineer picks up
+  `add-dungeon-keys` first (simpler, no cross-cutting recruitment UI
+  removal), then `add-recruit-via-lucky-wheel`. The two flagged bug
+  reports should be re-confirmed by the developer (hard refresh +
+  console check) before anyone spends Backend time on them — they may
+  not be live bugs at all.

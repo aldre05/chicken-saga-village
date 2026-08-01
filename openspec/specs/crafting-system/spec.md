@@ -17,19 +17,54 @@ Current recipes (`crafting.js`'s `RECIPES`):
 | Plank | 5 wood |
 | Brick | 5 stone |
 | Ingot | 5 ore |
+| Sword | 15 ore, 5 wood |
+| Bow | 15 wood, 10 feathers |
+| Staff | 10 wood, 10 stone |
+| Armor | 10 ore, 10 stone |
+| Boots | 3 plank, 5 feathers |
+| Heal Potion | 10 rice |
 
 Crafted items go to `gameState.inventory` (a simple `{itemId: count}`
-dict), separate from the main resource HUD — refined goods and
-decorative items alike currently have **no defined use** beyond
-sitting in inventory. That's an open question, not an oversight.
+dict), separate from the main resource HUD.
+
+**Refined goods now have a purpose — resolved by `add-hero-classes`.**
+The last 6 recipes above (Sword/Bow/Staff/Armor/Boots/Heal Potion) are
+equipment and consumables for the hero system (see hero-system spec):
+weapons are class-restricted, armor/boots are universal, Heal Potion
+is a consumable. This is what turned Plank/Ingot from "sits in
+inventory, no purpose" into something with a real use. Nest Charm and
+Basket remain purely decorative/no-defined-use, same open question as
+before — only the industrial refined goods (Plank/Brick/Ingot) got
+resolved, not every crafted item.
+
+**Boots' cost mixes a raw resource (`feathers`) with a crafted-item
+cost (`plank`, 3 of it)** — the first recipe to do this. `crafting.js`
+splits any recipe's cost dict into a raw-resource portion (checked/
+spent via `resources.js`) and an inventory-item portion (checked/spent
+directly against `inventoryState`) via `splitCost()`: a cost key is a
+raw resource if and only if it's in `resources.js`'s `RESOURCE_IDS`;
+anything else must be a previously-crafted item's own recipe id. This
+required extending `canAffordRecipe()`/`craftSpecific()` (previously
+resource-only) to accept and check `inventoryState` too — every other
+(resource-only) recipe works unchanged since its item-cost half is
+just empty.
 
 Each successful craft increments "Land Popularity" (see
 town-hall-progression spec) by 1.
 
 ## Constraints for future changes
 - New recipes are additive — just append to `RECIPES`, the panel UI
-  and craft logic don't need touching.
-- Before giving refined goods (Plank/Brick/Ingot/Chicken Feed) an
-  actual use (e.g. as building-upgrade costs, or hero-gear crafting),
-  that's a real design decision worth its own proposal, not a
-  drive-by addition.
+  and craft logic don't need touching (equipment/Heal Potion recipes
+  reused the existing recipe-row/Craft-button pattern exactly, no new
+  UI was built for them).
+- A recipe's cost dict CAN reference another recipe's id as an
+  inventory-item cost (like Boots referencing `plank`) — this is
+  supported, not a special case to avoid. Keep `splitCost()`'s
+  resource-vs-item distinction (membership in `RESOURCE_IDS`) as the
+  single source of truth for which half of a cost a given key belongs
+  to; don't hardcode a list of "item-cost recipes" elsewhere.
+- Nest Charm/Basket (and any future purely-decorative item) having no
+  defined use is still an open question, separate from the now-
+  resolved industrial-refined-goods question — don't conflate the two
+  when reasoning about "do refined goods have a purpose" going
+  forward.

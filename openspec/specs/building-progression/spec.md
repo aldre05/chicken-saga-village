@@ -15,8 +15,10 @@ pattern below — not triggered by E-press.** Earlier versions
 auto-unlocked on interact, the same pattern the Upgrade flow used to
 have and was fixed away from for the same reason: unlocking a
 building is a resource-spending decision and shouldn't happen from a
-single accidental keypress. Standing near any locked building/house
-now shows a persistent requirements panel:
+single accidental keypress. **Clicking** any locked building/house
+(see interaction-system spec — panels became click-to-open rather
+than proximity-triggered as of `add-click-to-open-panels`) shows a
+persistent requirements panel:
 - Below the building's own Town Hall gate: panel shows "Requires Town
   Hall level N" and the Unlock button is disabled — no cost is shown
   yet, since it isn't actionable.
@@ -25,9 +27,10 @@ now shows a persistent requirements panel:
   including red highlighting for any resource the player can't
   currently afford), with the Unlock button enabled once affordable.
 
-Pressing E on a locked building now only shows informational dialogue
+Pressing E on a locked building shows the same informational dialogue
 (current Town Hall requirement, or unlock cost once the requirement's
-met) — it never unlocks anything by itself.
+met) as an alternative to clicking — it never unlocks anything by
+itself either way.
 
 ### Leveling (unbounded for resource buildings, capped for houses)
 Resource buildings (Old Coop, Nest Bundle, Woodshed, Rice Paddy,
@@ -40,7 +43,14 @@ Houses level 1-5 only, each level adding +3 worker capacity (base 3,
 capped at 15 per house — bumped from a max of 10 after the
 resource-building count grew from 4 to 6 with Quarry/Mine, to keep
 population headroom scaling with how many buildings there are to
-staff). 5 houses × 15 = 75 max village population.
+staff). **10 houses total** (`house_1` through `house_10` —
+`add-th10-houses` added `house_6`-`house_10`, unlock-gated one per
+Town Hall level from TH6 through TH10; see town-hall-progression spec
+for the exact costs). 10 houses × 15 = **150 max village population**
+(was 75 with 5 houses). `house_6`-`house_10` reuse the exact same
+per-level formula and `BASE_UPGRADE_COST` shape (`{egg: 15, feathers:
+10}`) as `house_1`-`house_5` — no per-house special-casing was needed
+anywhere in `buildingLevels.js` to add them.
 
 **Upgrading is always a separate, deliberate action** — a dedicated
 Upgrade button in the building panel, never triggered by E-press.

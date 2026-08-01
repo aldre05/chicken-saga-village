@@ -1,19 +1,49 @@
 # Tasks: Recruit Heroes via Lucky Wheel Only
 
 ## Backend Engineer
-- [ ] 1.1 Split hero-creation out of `recruitHero()` into a
+- [x] 1.1 Split hero-creation out of `recruitHero()` into a
       cost-free `createRolledHero()` per design.md, without breaking
       anything that still calls `recruitHero()` directly (check for
       other callers first — don't assume Barracks is the only one)
-- [ ] 1.2 Add the "hero" reward-table entry to `luckyWheel.js` and the
+      (Grepped js/ and test/ first: recruitHero() is called from
+      main.js's Barracks button AND directly from heroes.test.js and
+      dungeons.test.js. Kept recruitHero()'s exact existing signature
+      and behavior — it's now a thin wrapper: cost check + spend +
+      createRolledHero() + push. Verified identical object shape via
+      simulation, and that recruitHero() still charges/rejects exactly
+      as before.)
+- [x] 1.2 Add the "hero" reward-table entry to `luckyWheel.js` and the
       resource-vs-hero branch `spinWheel()` needs (same shape of
       change as add-dungeon-keys' key-reward branch if that ships
       first — coordinate rather than duplicating the branching logic
       twice if both land close together)
-- [ ] 1.3 Confirm whether `RECRUIT_COST`/`canRecruitHero` become fully
+      (Both branches (item, hero) live in the same conditional chain
+      inside spinWheel(), not two parallel implementations. Required
+      a new `rosterState` param on spinWheel() — updated its one real
+      call site in main.js. This also creates a circular import
+      (heroes.js already imports pickWeighted from luckyWheel.js;
+      luckyWheel.js now imports createRolledHero from heroes.js) —
+      verified empirically at runtime, not just via syntax check, that
+      it resolves correctly, since both sides only use the import
+      inside function bodies rather than at top-level evaluation.)
+- [x] 1.3 Confirm whether `RECRUIT_COST`/`canRecruitHero` become fully
       dead code once the Barracks button is removed; if so, flag for
       Documentation & Testing to clean up rather than deleting
       unilaterally mid-Backend-pass
+      (Not literally dead code even after Frontend removes the
+      Barracks button: recruitHero() — which still has real callers in
+      heroes.test.js/dungeons.test.js — internally depends on both.
+      What DOES go away is their *production-UI* reachability: once
+      the Barracks recruit button is gone, RECRUIT_COST/canRecruitHero
+      are only reachable via recruitHero()'s internals and their own
+      dedicated tests, not any player-facing path. Flagging for
+      Documentation & Testing to decide whether to (a) leave
+      recruitHero()/RECRUIT_COST/canRecruitHero as supported legacy
+      internals purely for test convenience, or (b) refactor
+      heroes.test.js/dungeons.test.js to call createRolledHero()
+      directly and then actually remove recruitHero()/RECRUIT_COST/
+      canRecruitHero as truly dead. Deliberately not deciding this
+      unilaterally, per the task's own instruction.)
 
 ## Frontend Engineer
 - [ ] 2.1 Remove the Barracks recruit button + `RECRUIT_COST` display

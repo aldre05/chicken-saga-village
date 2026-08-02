@@ -46,10 +46,10 @@
       unilaterally, per the task's own instruction.)
 
 ## Frontend Engineer
-- [ ] 2.1 Remove the Barracks recruit button + `RECRUIT_COST` display
-- [ ] 2.2 Add a short static line pointing players to the Lucky Wheel
+- [x] 2.1 Remove the Barracks recruit button + `RECRUIT_COST` display
+- [x] 2.2 Add a short static line pointing players to the Lucky Wheel
       instead (per design.md — don't leave an unexplained gap)
-- [ ] 2.3 Lucky Wheel spin result: distinct visual/popup treatment for
+- [x] 2.3 Lucky Wheel spin result: distinct visual/popup treatment for
       landing on a hero vs. a resource reward (this is the biggest
       possible spin outcome, should read as a genuinely different
       moment, not just different text — same principle already

@@ -46,14 +46,14 @@
       for both new and legacy saves.)
 
 ## Frontend Engineer
-- [ ] 2.1 Dungeon panel: show current `dungeon_key` count near the
+- [x] 2.1 Dungeon panel: show current `dungeon_key` count near the
       entry cost, reuse `formatCostHTML`'s insufficient-highlighting
       pattern
-- [ ] 2.2 Send button: disabled state already flows from
+- [x] 2.2 Send button: disabled state already flows from
       `canSendHeroToDungeon` returning false — verify the 0-key case
       specifically shows a clear reason (not just a mysteriously
       disabled button)
-- [ ] 2.3 Workbench: add the new `dungeon_key` recipe row (reuses
+- [x] 2.3 Workbench: add the new `dungeon_key` recipe row (reuses
       existing recipe-row pattern, don't rebuild it)
 
 ## Code Reviewer

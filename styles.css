@@ -429,6 +429,16 @@ body {
   min-height: 1.4em;
   text-align: center;
 }
+.wheel-result-text.wheel-result-hero {
+  color: #c94fae;
+  font-weight: 700;
+  font-size: 1.05rem;
+  animation: wheelHeroWinPulse 1.4s ease-in-out infinite;
+}
+@keyframes wheelHeroWinPulse {
+  0%, 100% { text-shadow: 0 0 4px rgba(201, 79, 174, 0.4); }
+  50% { text-shadow: 0 0 14px rgba(201, 79, 174, 0.9); }
+}
 .wheel-ticket-info {
   font-family: var(--font-mono);
   font-size: 0.8rem;
@@ -551,15 +561,15 @@ body {
   margin-bottom: 6px;
 }
 
-.hero-panel-recruit-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.hero-panel-recruit-pointer {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--parchment-dim);
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--divider);
 }
-.recruit-btn, .send-hero-btn {
+.send-hero-btn {
   font-family: var(--font-mono);
   font-size: 0.78rem;
   font-weight: 600;
@@ -571,12 +581,23 @@ body {
   cursor: pointer;
   white-space: nowrap;
 }
-.recruit-btn:hover:not(:disabled), .send-hero-btn:hover:not(:disabled) { background: var(--rust-red-bright); }
-.recruit-btn:disabled, .send-hero-btn:disabled { opacity: 0.35; cursor: not-allowed; }
-.recruit-cost, .dungeon-entry-cost {
+.send-hero-btn:hover:not(:disabled) { background: var(--rust-red-bright); }
+.send-hero-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.dungeon-entry-cost {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   color: var(--parchment-dim);
+}
+.dungeon-key-count {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+}
+.dungeon-send-reason {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--rust-red-bright);
+  margin-top: 6px;
 }
 
 .hero-roster-list {

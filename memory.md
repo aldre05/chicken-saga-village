@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-08-01_
+_Last updated: 2026-08-02_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -47,38 +47,59 @@ live and correct — there is no missing work here, only stale leftover
 folders that are safe to delete (their content is 100% already merged
 and confirmed matching `openspec/specs/`).
 
+**UPDATE (2026-08-02, Frontend):** `add-dungeon-keys` and
+`add-recruit-via-lucky-wheel` now have their Frontend sections done
+too (see the detailed session section below). Also: **item 0.5's two
+"needs repro confirmation" bug reports very likely have a single root
+cause, now fixed** — `buildWheelDialVisual()` (module-load time, long
+before the game loop or any event listener registration) did
+`RESOURCE_CONFIG[seg.resource].icon` for every wheel segment, which
+throws for the two new REWARD_TABLE entries these two proposals'
+Backend work added (`dungeon_key`, `hero` — neither is in
+`RESOURCE_CONFIG`). Confirmed via direct reproduction (not assumed)
+that this crashed unconditionally on every page load once those
+entries existed. Since the crash happens before `requestAnimationFrame
+(loop)` is ever called and before any button's event listener gets
+attached, **this would make literally everything downstream look
+broken** — "Workbench can't craft anything" and "Dungeon Gate tiers
+not clickable" are both exactly what "the game never actually
+finished booting" looks like from a player's perspective. This is a
+strong candidate root cause, not a certainty — nobody has gone back to
+the original two reporters to confirm their exact symptoms matched a
+totally-frozen game rather than something narrower. Recommend closing
+item 0.5 only after that confirmation, not automatically on the
+strength of this theory alone.
+
 ## Active Tasks
-0. **NEW (2026-08-01) — two proposals drafted, ready for Backend
-   Engineer to pick up:** `add-dungeon-keys` (gate dungeon runs behind
-   a craftable/winnable consumable `dungeon_key` item, stacks on top
-   of the existing entry cost, prep for a future market) and
-   `add-recruit-via-lucky-wheel` (remove the direct Barracks recruit
-   button; heroes only come from Lucky Wheel spins going forward).
-   Both drafted with proposal.md/design.md/tasks.md following this
-   project's standard format — see `openspec/changes/` once applied.
+0. ~~two proposals drafted, ready for Backend Engineer to pick up~~ —
+   **UPDATE (2026-08-02): Backend AND Frontend sections both done for
+   both proposals now.** Code Reviewer + Documentation & Testing
+   passes still open for `add-dungeon-keys` and
+   `add-recruit-via-lucky-wheel`. **Also found this session, not
+   fixed (not mine to guess-fix):** `add-dungeon-keys/proposal.md` is
+   a byte-for-byte duplicate of `add-recruit-via-lucky-wheel/
+   proposal.md` — wrong file content got uploaded to that folder.
+   `design.md`/`tasks.md` in each folder are correct and genuinely
+   different; only `proposal.md` is wrong. Needs a re-upload of the
+   correct content by whoever owns that proposal, not a Frontend
+   Engineer rewriting proposal intent from guesswork.
    **A real-money purchase path (buy tickets/heroes for $, Web2
    games-as-a-service style) is now in scope per the developer's
    explicit decision** (see Decisions below) — not drafted into
    either of these two proposals yet, since it needs its own proposal
    once there's an actual market/shop surface to sell into, not a
    quiet addition to a free-mechanic change.
-0.5. **NEW (2026-08-01) — two bug reports need repro confirmation
-   before anyone fixes anything:** (a) "Workbench can't craft
-   anything" — reviewed `crafting.js` and the panel-render code
-   directly, found no logic bug (simulated with maxed resources, all
-   12 recipes come back craftable); this exact symptom matches a bug
-   that used to exist (Boots' `plank` cost crashing cost-display)
-   which is already fixed in the current code, so a stale
-   cached/deployed build is the leading suspect — needs a hard
-   refresh + a check of the browser console for actual errors before
-   assuming it's a live bug. (b) "Dungeon Gate medium/hard not
-   clickable" — reviewed the tier-picker code, the tier buttons have
-   no disabled state at all in the code; needs confirmation of
-   whether this means the tier buttons themselves or the separately-
-   gated Send button (which legitimately disables if a hero's power
-   is below the tier's difficulty), and confirmation Dungeon Gate is
-   actually unlocked (Town Hall 4+) rather than showing the generic
-   locked-building panel instead.
+0.5. **UPDATE (2026-08-02): very likely explained and fixed, but not
+   yet confirmed against the original reports — see the crash-bug
+   writeup in Current Status above and this session's detailed
+   section below.** (a) "Workbench can't craft anything" and (b)
+   "Dungeon Gate medium/hard not clickable" both match the symptom of
+   a module-load-time crash that would have prevented the entire game
+   loop and every event listener from ever initializing. Recommend
+   whoever filed these two reports re-tests against current code
+   before this item is closed — the theory is strong (crash location
+   confirmed via direct code-order inspection, not speculation) but
+   unconfirmed against what those two people actually saw.
 1. **NEW, top priority because it's trivial and fully unblocked:**
    delete all 5 stale `openspec/changes/` folders (`add-click-to-open-
    panels`, `add-dungeon-failure`, `add-hero-classes`,
@@ -111,6 +132,83 @@ and confirmed matching `openspec/specs/`).
    pattern, but flagging explicitly since it's a real option, not
    silently deciding either way. See this session's log for why it
    wasn't added unilaterally.
+
+## Frontend Session: Dungeon Keys + Recruit-via-Lucky-Wheel (2026-08-02)
+Fresh clone per the standing instruction — caught HEAD had moved
+again since a prior check this same day, confirming it matters.
+Found the two new proposals (`add-dungeon-keys`,
+`add-recruit-via-lucky-wheel`), both Backend-done/Frontend-open, with
+no real ordering dependency between them (unlike the earlier
+click-to-open-panels situation), so did both together since they
+share one fix.
+
+**The headline finding: a whole-game crash on every page load,
+introduced by Backend's own REWARD_TABLE additions for these two
+proposals.** `buildWheelDialVisual()` runs at module-load time (line
+397, hundreds of lines before `requestAnimationFrame(loop)` at line
+1174) and did `RESOURCE_CONFIG[seg.resource].icon` for every wheel
+segment. `dungeon_key` and `hero` (the two new reward types) aren't
+raw resources, so `RESOURCE_CONFIG[...]` is `undefined` for them —
+confirmed via direct reproduction that this threw unconditionally,
+before any fix, the moment the reward table contained either entry.
+Since nothing after line 397 would ever run if it threw, this isn't a
+narrow "wheel looks wrong" bug — no event listeners get attached, the
+game loop never starts, everything looks broken. Very likely explains
+the two pending bug reports in Active Tasks item 0.5 (not confirmed
+against the original reporters, see that item). Fixed with a
+resource/item/hero-aware `iconFor()`/`nameFor()` pair, reused for the
+same-shaped (less severe, but real) crash in the post-spin result
+text.
+
+**`add-recruit-via-lucky-wheel` (2.1–2.3):** removed the Barracks
+recruit button/cost display and the now-dead `recruitBtn` click
+handler, replaced with a static "Recruit heroes at the Lucky Wheel 🎡"
+line. Removed `canRecruitHero`/`recruitHero`/`RECRUIT_COST` from
+`main.js`'s imports (now unused there — NOT removed from `heroes.js`
+itself, since `recruitHero()` still has real internal dependents and
+test callers per Backend's own note; that's not a Frontend-scope
+deletion). Also cleaned up an unrelated pre-existing unused import
+(`HERO_CLASSES`) noticed while touching that same import line. Task
+2.3 (distinct hero-win treatment) built on top of the crash fix: a
+hero win gets genuinely different text + a pulsing magenta color
+(reusing the wheel segment's own `#c94fae`, so the popup visually
+ties back to the wedge that produced it) rather than just different
+wording — same principle as the dungeon success/failure popups from
+an earlier session.
+
+**`add-dungeon-keys` (2.1–2.3):** dungeon panel now shows the current
+key count next to the entry cost (red-highlighted at 0, reusing
+`cost-insufficient`). Task 2.2 needed actual new UI, not just
+verification as its own task description suggested — the Send
+button's disabled state had no visible explanation for *why* at all
+(same gap as the earlier downed-hero fix, but for the key-shortage
+case). Added a `dungeonSendReasonEl` that checks the same conditions
+`canSendHeroToDungeon` gates on, in the same order, so the message
+always matches the actual blocking reason rather than guessing.
+Task 2.3 (Workbench recipe row) needed zero code changes — confirmed
+by direct inspection that the existing generic `RECIPES` loop already
+picks up `dungeon_key` automatically, same as every equipment item
+did in an earlier session.
+
+**Verification:** `node --check` throughout; full test suite
+(195/212 passing, same 17 pre-existing Backend/Documentation-owned
+failures both before and after — rigorously confirmed via `git stash`
+diffing the exact failing-test-name list twice, since one raw run-to-
+run count wobbled 17→18 from unrelated probabilistic-test flakiness,
+not a regression). Two temporary headless-jsdom smoke tests (deleted
+after use): one confirmed the exact crash scenario no longer
+reproduces on boot, then used a rigged `Math.random` to deterministically
+land a spin on each of the two new reward types (rather than hoping
+to get lucky on a ~4-5%-weight segment) and confirmed both render
+correctly end-to-end; the other walked a real player to both the
+Barracks (confirming no crash from the removed recruit button, and
+the Lucky Wheel pointer text is present) and the Dungeon Gate
+(confirming the 0-key state shows the red count + the specific
+"No Dungeon Key" reason).
+
+**Files touched:** `js/main.js`, `index.html`, `styles.css`,
+`openspec/changes/add-dungeon-keys/tasks.md`,
+`openspec/changes/add-recruit-via-lucky-wheel/tasks.md`, `memory.md`.
 
 ## Code Reviewer Session: All 4 Pending Proposals (2026-07-30)
 Fresh clone each time per explicit standing instruction, confirmed
@@ -875,6 +973,27 @@ deliverables — it was a delivery artifact (a git patch for manual
 application), not meant to live in the repo.
 
 ## Session Log
+- **2026-08-02 (Frontend — dungeon-keys + recruit-via-lucky-wheel):**
+  Re-cloned fresh per the standing instruction (caught HEAD had moved
+  again since earlier this same day). Found and fixed a whole-game
+  module-load-time crash (`buildWheelDialVisual()` throwing on the
+  two new REWARD_TABLE entries) — very likely the actual root cause
+  of the two pending bug reports in Active Tasks item 0.5, though not
+  confirmed against the original reporters. Completed both proposals'
+  Frontend sections (dungeon panel key count + clear disabled-reason,
+  Workbench recipe row needed zero changes; Barracks recruit button
+  removed + Lucky Wheel pointer added, distinct hero-win popup
+  treatment). Also found and flagged (not fixed) that
+  `add-dungeon-keys/proposal.md` is a duplicate of
+  `add-recruit-via-lucky-wheel/proposal.md` — wrong upload, not mine
+  to guess-rewrite. Verified via node --check, full test suite
+  (rigorously diffed the exact failing-test list before/after twice
+  to rule out flakiness vs. real regression), and two temporary
+  headless-jsdom smoke tests using a rigged Math.random for
+  deterministic reward-type testing plus real simulated player
+  movement (both deleted after use). Checked off tasks.md Frontend
+  sections for both changes. Not pushed — no git credentials in this
+  environment.
 - **2026-07-29 (Frontend — 3 changes: click-to-open-panels,
   hero-classes/dungeon-failure, th10-houses):** Sequencing (click-to-
   open-panels → hero-classes+dungeon-failure together → th10-houses)

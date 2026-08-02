@@ -6,7 +6,7 @@ import { findNearestInteractable, distanceToRect, createDialogueState, closeDial
 import { renderFrame } from './render.js';
 import { loadGameState, saveGameState } from './gameState.js';
 import { HANDLERS, BUILDING_RESOURCE } from './interactionHandlers.js';
-import { RESOURCE_CONFIG, isResourceUnlocked, collectFromBuilding, getEffectiveRatePerSecond, getBuildingStored } from './resources.js';
+import { RESOURCE_CONFIG, isResourceUnlocked, collectFromBuilding, getEffectiveRatePerSecond, getBuildingStored, canAfford } from './resources.js';
 import { assignWorker, unassignWorker, getIdleWorkers } from './workers.js';
 import { isBuildingUnlocked, UNLOCK_CONFIG, unlockBuilding } from './buildingUnlocks.js';
 import { applyUpkeep } from './upkeep.js';
@@ -20,12 +20,13 @@ import {
   isLuckyWheelUnlocked, getTicketCap, syncTickets, spinWheel, getMsUntilNextTicket, REWARD_TABLE
 } from './luckyWheel.js';
 import {
-  canRecruitHero, recruitHero, effectivePower, isHeroBusy, isHeroIdle, getHeroById,
-  RECRUIT_COST, HERO_CLASSES, EQUIPMENT_SLOTS, EQUIPMENT_ITEMS, canEquipItem, equipHero, unequipHero,
+  effectivePower, isHeroBusy, isHeroIdle, getHeroById,
+  EQUIPMENT_SLOTS, EQUIPMENT_ITEMS, canEquipItem, equipHero, unequipHero,
   isDowned, getMaxHp, getHealCost, canHealHero, healHero, useHealPotion, canUseHealPotion, HEAL_POTION_ITEM_ID
 } from './heroes.js';
 import {
-  DUNGEON_TIERS, DUNGEON_TIER_IDS, getDungeonTier, canSendHeroToDungeon, sendHeroToDungeon, resolveReadyDungeons
+  DUNGEON_TIERS, DUNGEON_TIER_IDS, getDungeonTier, canSendHeroToDungeon, sendHeroToDungeon, resolveReadyDungeons,
+  DUNGEON_KEY_ITEM_ID
 } from './dungeons.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -55,8 +56,6 @@ const craftingPanelEl = document.getElementById('craftingPanel');
 const craftingRecipeListEl = document.getElementById('craftingRecipeList');
 
 const heroPanelEl = document.getElementById('heroPanel');
-const recruitBtn = document.getElementById('recruitBtn');
-const recruitCostEl = document.getElementById('recruitCost');
 const heroRosterListEl = document.getElementById('heroRosterList');
 
 const dungeonPanelEl = document.getElementById('dungeonPanel');
@@ -65,6 +64,8 @@ const dungeonRewardPreviewEl = document.getElementById('dungeonRewardPreview');
 const dungeonHeroListEl = document.getElementById('dungeonHeroList');
 const sendHeroBtn = document.getElementById('sendHeroBtn');
 const dungeonEntryCostEl = document.getElementById('dungeonEntryCost');
+const dungeonKeyCountEl = document.getElementById('dungeonKeyCount');
+const dungeonSendReasonEl = document.getElementById('dungeonSendReason');
 
 // Static refs to the Barracks/Dungeon Gate world objects, used as the
 // anchor point for floating popups (recruit results, mission results).
@@ -147,11 +148,21 @@ const ITEM_CONFIG = {
   nest_charm: { icon: '🧿' }, basket: { icon: '🧺' }, chicken_feed: { icon: '🌰' },
   plank: { icon: '🪵' }, brick: { icon: '🧱' }, ingot: { icon: '🔩' },
   sword: { icon: '⚔️' }, bow: { icon: '🏹' }, staff: { icon: '🪄' },
-  armor: { icon: '🛡️' }, boots: { icon: '👢' }, heal_potion: { icon: '🧪' }
+  armor: { icon: '🛡️' }, boots: { icon: '👢' }, heal_potion: { icon: '🧪' },
+  dungeon_key: { icon: '🗝️' }
 };
 
 function iconFor(id) {
   return RESOURCE_CONFIG[id]?.icon || ITEM_CONFIG[id]?.icon || '❔';
+}
+
+// Display name for any reward/cost id — raw resources have one in
+// RESOURCE_CONFIG; crafted items (dungeon_key, sword, ...) don't, so
+// derive a readable name from the id itself (snake_case -> Title Case)
+// rather than hardcoding a name per item.
+function nameFor(id) {
+  if (RESOURCE_CONFIG[id]) return RESOURCE_CONFIG[id].name;
+  return id.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 // Renders a cost dict as HTML, highlighting any resource/item the
@@ -435,7 +446,15 @@ function buildWheelDialVisual() {
     label.className = 'wheel-segment-label';
     label.style.width = labelWidth + 'px';
     label.style.transform = `rotate(${seg.midAngle}deg) translate(${-labelWidth / 2}px, -${labelRadius}px)`;
-    label.innerHTML = `<span class="seg-icon">${RESOURCE_CONFIG[seg.resource].icon}</span>+${seg.amount}`;
+    // seg.resource can be a raw resource, an inventory item
+    // (dungeon_key), or 'hero' — RESOURCE_CONFIG only covers raw
+    // resources. This ran at module load time (every page load, not
+    // just when the wheel is opened) via the buildWheelDialVisual()
+    // call right below buildWheelSegments() — RESOURCE_CONFIG[seg.
+    // resource] being undefined for the two new reward types crashed
+    // unconditionally on load, before this fix.
+    const segIcon = seg.resource === 'hero' ? '🦸' : iconFor(seg.resource);
+    label.innerHTML = `<span class="seg-icon">${segIcon}</span>+${seg.amount}`;
     wheelDialEl.appendChild(label);
   }
 }
@@ -477,6 +496,7 @@ luckyWheelModalEl.addEventListener('click', (e) => {
 
 function openWheelModal() {
   wheelResultTextEl.textContent = '';
+  wheelResultTextEl.classList.remove('wheel-result-hero');
   updateWheelModalInfo();
   luckyWheelModalEl.classList.remove('hidden');
 }
@@ -513,7 +533,23 @@ wheelSpinBtn.addEventListener('click', () => {
   spinDialToSegment(segment.midAngle);
 
   setTimeout(() => {
-    wheelResultTextEl.textContent = `You won ${reward.amount} ${RESOURCE_CONFIG[reward.resource].name}! ${RESOURCE_CONFIG[reward.resource].icon}`;
+    // reward.resource can now be a raw resource, an inventory item
+    // (dungeon_key), or 'hero' — RESOURCE_CONFIG only covers raw
+    // resources, so looking it up directly for every reward type
+    // would throw on the two new reward kinds. iconFor/nameFor handle
+    // all three uniformly. A hero win gets genuinely distinct
+    // treatment (task 2.3), not just different wording — same
+    // principle already applied to dungeon success vs. failure
+    // popups: the biggest possible spin outcome should read as a
+    // different kind of moment.
+    if (reward.hero) {
+      const rarityLabel = reward.hero.rarity.charAt(0).toUpperCase() + reward.hero.rarity.slice(1);
+      wheelResultTextEl.textContent = `🎉 You won a hero! ${rarityLabel} ${reward.hero.name} joined the roster!`;
+      wheelResultTextEl.classList.add('wheel-result-hero');
+    } else {
+      wheelResultTextEl.textContent = `You won ${reward.amount} ${nameFor(reward.resource)}! ${iconFor(reward.resource)}`;
+      wheelResultTextEl.classList.remove('wheel-result-hero');
+    }
     wheelSpinning = false;
     updateResourceHud();
     updateWheelModalInfo();
@@ -786,14 +822,11 @@ function updateHeroPanel(target) {
 
   const now = Date.now();
 
-  recruitCostEl.innerHTML = formatCostHTML(RECRUIT_COST);
-  recruitBtn.disabled = !canRecruitHero(gameState.resources);
-
   heroRosterListEl.innerHTML = '';
   if (gameState.heroes.roster.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'hero-roster-empty';
-    empty.textContent = 'No heroes yet — recruit your first one above.';
+    empty.textContent = 'No heroes yet — win one on the Lucky Wheel.';
     heroRosterListEl.appendChild(empty);
   } else {
     for (const hero of gameState.heroes.roster) {
@@ -840,17 +873,6 @@ function updateHeroPanel(target) {
   heroPanelEl.classList.remove('hidden');
 }
 
-recruitBtn.addEventListener('click', () => {
-  const hero = recruitHero(gameState.heroes, gameState.resources);
-  if (hero) {
-    const rarityLabel = hero.rarity.charAt(0).toUpperCase() + hero.rarity.slice(1);
-    spawnFloatingPopup(`Recruited ${rarityLabel} ${hero.name}! 🛡️`, barracksObj.x + barracksObj.width / 2, barracksObj.y);
-  } else {
-    spawnFloatingPopup("Can't afford it", barracksObj.x + barracksObj.width / 2, barracksObj.y);
-  }
-  updateResourceHud();
-});
-
 function updateDungeonPanel(target) {
   const showPanel = target && target.id === 'dungeon_gate' && isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate');
 
@@ -877,6 +899,8 @@ function updateDungeonPanel(target) {
 
   const selectedTier = getDungeonTier(selectedDungeonTierId);
   dungeonEntryCostEl.innerHTML = formatCostHTML(selectedTier.entryCost);
+  const keyCount = gameState.inventory[DUNGEON_KEY_ITEM_ID] || 0;
+  dungeonKeyCountEl.innerHTML = `<span class="${keyCount < 1 ? 'cost-insufficient' : ''}">🗝️${keyCount}</span>`;
   dungeonRewardPreviewEl.innerHTML = `Reward: ${formatCostHTML(selectedTier.fullReward)} <span class="dungeon-reward-xp">+${selectedTier.fullXp}XP</span>`;
 
   // --- Idle hero picker --- (busy heroes can't be sent, so they're
@@ -923,7 +947,26 @@ function updateDungeonPanel(target) {
   }
 
   const selectedHero = selectedHeroId ? getHeroById(gameState.heroes, selectedHeroId) : null;
-  sendHeroBtn.disabled = !canSendHeroToDungeon(selectedHero, selectedDungeonTierId, gameState.resources, gameState.inventory, now);
+  const canSend = canSendHeroToDungeon(selectedHero, selectedDungeonTierId, gameState.resources, gameState.inventory, now);
+  sendHeroBtn.disabled = !canSend;
+
+  // Task 2.2 (add-dungeon-keys): a disabled Send button needs a
+  // visible reason, not just a mysterious disabled state — same
+  // principle already applied to the downed-hero-exclusion fix
+  // above. Checked in the same order canSendHeroToDungeon itself
+  // gates on, so the message always matches the actual blocking
+  // condition rather than guessing.
+  if (canSend || !selectedHero) {
+    dungeonSendReasonEl.classList.add('hidden');
+  } else if (keyCount < 1) {
+    dungeonSendReasonEl.textContent = 'No Dungeon Key — craft one at the Workbench or win one on the Lucky Wheel.';
+    dungeonSendReasonEl.classList.remove('hidden');
+  } else if (!canAfford(gameState.resources, selectedTier.entryCost)) {
+    dungeonSendReasonEl.textContent = "Not enough resources for this tier's entry cost.";
+    dungeonSendReasonEl.classList.remove('hidden');
+  } else {
+    dungeonSendReasonEl.classList.add('hidden');
+  }
 
   dungeonPanelEl.classList.remove('hidden');
 }

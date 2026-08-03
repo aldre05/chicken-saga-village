@@ -39,6 +39,37 @@ export const DUNGEON_TIER_IDS = Object.keys(DUNGEON_TIERS);
 // spirit as entryCost already being non-refundable on failure).
 export const DUNGEON_KEY_ITEM_ID = 'dungeon_key';
 
+// Gem cost to buy a key directly, bypassing crafting/wheel-luck
+// entirely — see openspec/changes/add-gems-currency/. Placeholder,
+// needs playtesting like every other cost in this project (see
+// design.md's own Risks/Open Questions: unvalidated until a real
+// $-to-gem conversion rate exists).
+export const DUNGEON_KEY_GEM_COST = 25;
+
+// `gemsState` is any object exposing a mutable `.gems` number — in
+// practice this is `gameState` itself: design.md's Data Model section
+// specifies gems as a flat top-level field on gameState (not its own
+// sub-object the way inventory/heroes/etc. are), matching this
+// project's existing `popularity` flat-number precedent. NOTE:
+// design.md's own two sections actually disagree on this — the Data
+// Model section shows a flat `gems: 0` field, but the Spend
+// Use-Cases code snippet shows `gemsState.gems -=` as if gems lived
+// in its own wrapper object. Resolved in favor of the flat field
+// (task 1.1's literal wording), with these functions simply taking
+// whatever object gems actually lives on rather than assuming a
+// `{gems: N}` wrapper exists.
+export function canBuyDungeonKeyWithGems(gemsState) {
+  return gemsState.gems >= DUNGEON_KEY_GEM_COST;
+}
+
+// Returns true if the purchase happened, false if unaffordable.
+export function buyDungeonKeyWithGems(gemsState, inventoryState) {
+  if (!canBuyDungeonKeyWithGems(gemsState)) return false;
+  gemsState.gems -= DUNGEON_KEY_GEM_COST;
+  inventoryState[DUNGEON_KEY_ITEM_ID] = (inventoryState[DUNGEON_KEY_ITEM_ID] || 0) + 1;
+  return true;
+}
+
 export function getDungeonTier(tierId) {
   return DUNGEON_TIERS[tierId] || null;
 }

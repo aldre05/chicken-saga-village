@@ -4,24 +4,46 @@
 import { canAfford, spendResources, RESOURCE_IDS } from './resources.js';
 
 export const RECIPES = [
-  { id: 'nest_charm',   name: 'Nest Charm',   cost: { egg: 2, feathers: 2 } },
-  { id: 'basket',       name: 'Basket',       cost: { egg: 3, wood: 2 } },
-  { id: 'chicken_feed', name: 'Chicken Feed', cost: { rice: 5 } },
+  // Refined goods — rebalanced per
+  // openspec/changes/add-crafting-cost-rebalance/. Developer decision:
+  // both these AND equipment (below) were "underpowered," cost
+  // increase only (no new use-case this pass). ~7-9x the previous
+  // cost — these were previously a rounding error (4-5 total
+  // resources) against passive production; now a real, felt
+  // investment. NOTE: design.md's own "Context" baseline (showing
+  // sword costing `ingot`, staff costing `chicken_feed`, etc.) is
+  // STALE — it describes a refined-goods supply chain that was never
+  // actually implemented. The real baseline this rebalance is against
+  // is what's below, verified directly against this file before
+  // touching any number, not taken from that doc. One consequence
+  // worth flagging: `brick` and `ingot` have ZERO consumers anywhere
+  // in this file even after this change (worse than design.md's own
+  // "thin use-case" framing assumed) — `plank` has exactly one
+  // (Boots). Left as-is since the developer explicitly chose
+  // cost-increase-only, not a new-use-case fix, this pass.
+  { id: 'nest_charm',   name: 'Nest Charm',   cost: { egg: 20, feathers: 15 } },
+  { id: 'basket',       name: 'Basket',       cost: { egg: 15, wood: 20 } },
+  { id: 'chicken_feed', name: 'Chicken Feed', cost: { rice: 35 } },
   { id: 'plank',        name: 'Plank',        cost: { wood: 5 } },
   { id: 'brick',        name: 'Brick',        cost: { stone: 5 } },
   { id: 'ingot',        name: 'Ingot',        cost: { ore: 5 } },
-  // Equipment + Heal Potion, per
-  // openspec/changes/add-hero-classes/design.md's table exactly.
+  // Equipment + Heal Potion. Equipment costs rebalanced alongside the
+  // refined goods above (~2.5x previous — already non-trivial, so a
+  // smaller multiple than the refined goods' ~7-9x, but still a real
+  // increase per the developer's "other items should matter too"
+  // framing, not left untouched while only refined goods went up).
+  // Original shapes/resource-flavor kept per
+  // openspec/changes/add-hero-classes/design.md's table, just scaled.
   // NOTE: Boots' cost references `plank`, an inventory item (from the
   // recipe above), not a raw resource in resources.js's RESOURCE_IDS
   // — see splitCost()/canAffordRecipe() below, which is why this
   // recipe list can mix the two in one cost dict without every other
   // (resource-only) recipe needing any change.
-  { id: 'sword',       name: 'Sword',       cost: { ore: 15, wood: 5 } },
-  { id: 'bow',         name: 'Bow',         cost: { wood: 15, feathers: 10 } },
-  { id: 'staff',       name: 'Staff',       cost: { wood: 10, stone: 10 } },
-  { id: 'armor',       name: 'Armor',       cost: { ore: 10, stone: 10 } },
-  { id: 'boots',       name: 'Boots',       cost: { plank: 3, feathers: 5 } },
+  { id: 'sword',       name: 'Sword',       cost: { ore: 35, wood: 15 } },
+  { id: 'bow',         name: 'Bow',         cost: { wood: 35, feathers: 20 } },
+  { id: 'staff',       name: 'Staff',       cost: { wood: 25, stone: 25 } },
+  { id: 'armor',       name: 'Armor',       cost: { ore: 25, stone: 25 } },
+  { id: 'boots',       name: 'Boots',       cost: { plank: 6, feathers: 15 } },
   { id: 'heal_potion', name: 'Heal Potion', cost: { rice: 10 } },
   // Dungeon Key — openspec/changes/add-dungeon-keys/. Cost is a
   // DELIBERATE DEVIATION from design.md's suggested

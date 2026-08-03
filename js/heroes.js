@@ -162,6 +162,38 @@ export function recruitHero(rosterState, resourceState) {
   return hero;
 }
 
+// Gem cost to buy a hero roll directly, same rarity table as the free
+// wheel-based recruit path — see
+// openspec/changes/add-gems-currency/. Placeholder, needs
+// playtesting like every other cost in this project.
+export const HERO_ROLL_GEM_COST = 100;
+
+// `gemsState` is any object exposing a mutable `.gems` number — see
+// dungeons.js's canBuyDungeonKeyWithGems for the full note on why
+// (design.md's own two sections disagree on whether gems is a flat
+// field or wrapped; resolved in favor of flat, matching task 1.1's
+// literal wording and this project's `popularity` precedent).
+export function canBuyHeroRollWithGems(gemsState) {
+  return gemsState.gems >= HERO_ROLL_GEM_COST;
+}
+
+// Returns the newly created hero object, or null if unaffordable.
+// DELIBERATE DEVIATION from design.md's snippet, which returns a bare
+// `true` — returning the actual hero object instead matches every
+// sibling "roll a hero" path in this codebase (recruitHero() above,
+// spinWheel()'s hero branch in luckyWheel.js), both of which return
+// the hero so the caller/UI can show what was actually rolled. A gem
+// purchase button needs to display its result same as any other
+// recruit path; a bare boolean would throw that information away for
+// no reason.
+export function buyHeroRollWithGems(gemsState, rosterState) {
+  if (!canBuyHeroRollWithGems(gemsState)) return null;
+  gemsState.gems -= HERO_ROLL_GEM_COST;
+  const hero = createRolledHero();
+  rosterState.roster.push(hero);
+  return hero;
+}
+
 // power at the hero's current level: basePower scaled +10%/level
 // above level 1 (linear, matches every other progression curve in
 // this project), capped at MAX_HERO_LEVEL, plus the flat sum of all

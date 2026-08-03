@@ -98,3 +98,37 @@ export function spendResources(resourceState, costDict) {
     resourceState.carried[id] -= amount;
   }
 }
+
+// Gems-to-resource exchange — openspec/changes/add-gems-currency/.
+// Flat rate across all 6 resources for simplicity (design.md flags
+// this as an open question — should scarcer resources like ore/stone
+// cost more gems than common ones like egg/feathers? — but says
+// don't block on it; flat is the starting point). Placeholder rate,
+// needs playtesting like every other cost in this project.
+export const GEM_TO_RESOURCE_RATE = 10; // 1 gem = 10 of any resource
+
+// `gemsState` is any object exposing a mutable `.gems` number — see
+// dungeons.js's canBuyDungeonKeyWithGems for the full note on the
+// flat-vs-wrapped gems resolution this matches.
+export function canExchangeGemsForResource(gemsState, gemAmount) {
+  return gemAmount > 0 && gemsState.gems >= gemAmount;
+}
+
+// Exchanges `gemAmount` gems for `gemAmount * GEM_TO_RESOURCE_RATE` of
+// `resourceId`. Credits `carried` directly, uncapped — matching every
+// other resource-crediting path in this codebase (collection, dungeon
+// rewards, wheel rewards, quest rewards); `RESOURCE_CONFIG.cap` only
+// bounds a building's uncollected buffer before collection, never
+// `carried` itself, so this doesn't need a special case. Returns true
+// if the exchange happened, false if the resource id is unknown or
+// unaffordable.
+export function exchangeGemsForResource(gemsState, resourceState, resourceId, gemAmount) {
+  if (!RESOURCE_IDS.includes(resourceId)) return false;
+  if (!canExchangeGemsForResource(gemsState, gemAmount)) return false;
+
+  gemsState.gems -= gemAmount;
+  const granted = gemAmount * GEM_TO_RESOURCE_RATE;
+  resourceState.carried[resourceId] += granted;
+  resourceState.totalCollected[resourceId] += granted;
+  return true;
+}

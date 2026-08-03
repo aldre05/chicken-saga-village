@@ -7,9 +7,14 @@
 // openspec/changes/add-recruit-via-lucky-wheel/) an occasional new
 // hero — this is now the ONLY way to recruit a hero, see heroes.js's
 // recruitHero()/RECRUIT_COST for the legacy paid path this replaced
-// as the primary route. Still no real value, no gacha-for-money, no
-// PvP "steal" item (that stays deferred along with everything else
-// needing multiplayer/legal review).
+// as the primary route — plus (per
+// openspec/changes/add-gems-currency/) an occasional small amount of
+// gems, one of several free-earn paths for that currency alongside
+// its spend hooks in dungeons.js/heroes.js/resources.js. Still no
+// gacha-for-money, no PvP "steal" item (those stay deferred along
+// with everything else needing multiplayer/legal review) — gems
+// itself has no real-money purchase path yet either, see
+// add-gems-currency/proposal.md's Non-Goals.
 
 import { RESOURCE_IDS } from './resources.js';
 import { createRolledHero } from './heroes.js';
@@ -42,7 +47,13 @@ export const REWARD_TABLE = [
   // doesn't stack like a resource/item count, see spinWheel()'s hero
   // branch below, which creates one new hero and ignores `amount` as
   // a quantity multiplier entirely.
-  { resource: 'hero', amount: 1, weight: 4, color: '#c94fae' }
+  { resource: 'hero', amount: 1, weight: 4, color: '#c94fae' },
+  // Gems (premium currency) — openspec/changes/add-gems-currency/
+  // design.md's Free-Earn Placeholder, weight/amount/color exactly as
+  // specified. Small amount, moderate-low weight — a working loop to
+  // test against without gems flooding in fast enough to undercut a
+  // future real-money value proposition.
+  { resource: 'gems', amount: 5, weight: 6, color: '#4fc9c9' }
 ];
 
 export function createLuckyWheelState() {
@@ -118,23 +129,32 @@ export function getRewardScale(townHallLevel) {
 // created hero object on a hero-reward spin, otherwise null. Never
 // mutates REWARD_TABLE itself. Returns null if there were no tickets.
 //
-// `inventoryState`/`rosterState` are required params (signature
-// change, not additive-only — see
-// openspec/changes/add-dungeon-keys/design.md and
-// add-recruit-via-lucky-wheel/design.md, same precedent as
-// add-hero-classes' getCraftableRecipes change): needed because a
-// reward can now be an inventory item (dungeon_key) or a hero, not
-// always a raw resource. Which of the three a reward is uses the same
+// `inventoryState`/`rosterState`/`gemsState` are required params
+// (signature change, not additive-only — see
+// openspec/changes/add-dungeon-keys/design.md,
+// add-recruit-via-lucky-wheel/design.md, and
+// add-gems-currency/design.md, same precedent as add-hero-classes'
+// getCraftableRecipes change): needed because a reward can now be an
+// inventory item (dungeon_key), a hero, or gems, not always a raw
+// resource. `gemsState` is any object exposing a mutable `.gems`
+// number — in practice this is gameState itself, same as
+// dungeons.js's/heroes.js's gem-purchase functions (see
+// canBuyDungeonKeyWithGems's note on the flat-vs-wrapped gems
+// resolution). Which of the four a reward is uses the same
 // resource-vs-item distinction crafting.js's splitCost() draws (a
-// reward id is a raw resource iff it's in RESOURCE_IDS), plus a
-// dedicated check for the 'hero' id specifically, since a hero isn't
-// a stackable count the way dungeon_key is — it creates one new
-// roster entry via heroes.js's createRolledHero() instead of
-// incrementing anything. Both non-resource branches share this one
-// function/conditional chain rather than being built as two separate
-// parallel implementations, per add-recruit-via-lucky-wheel's task
-// 1.2 (coordinate, don't duplicate the branching logic).
-export function spinWheel(state, resourceState, inventoryState, rosterState, now, townHallLevel) {
+// reward id is a raw resource iff it's in RESOURCE_IDS), plus
+// dedicated checks for the 'hero' and 'gems' ids specifically — a
+// hero isn't a stackable count the way dungeon_key is (creates one
+// new roster entry instead of incrementing anything), and gems must
+// NOT fall into the generic item branch below (it would otherwise
+// silently write into inventoryState.gems instead of the actual
+// currency, since 'gems' isn't in RESOURCE_IDS and would match the
+// item catch-all without this explicit check). All non-resource
+// branches share this one function/conditional chain rather than
+// being built as separate parallel implementations, per
+// add-recruit-via-lucky-wheel's task 1.2 and add-gems-currency's task
+// 1.5 (coordinate, don't triple the branching logic).
+export function spinWheel(state, resourceState, inventoryState, rosterState, gemsState, now, townHallLevel) {
   syncTickets(state, now, townHallLevel);
   if (state.tickets <= 0) return null;
 
@@ -144,13 +164,15 @@ export function spinWheel(state, resourceState, inventoryState, rosterState, now
   const baseEntry = pickWeightedReward();
   const isRawResource = RESOURCE_IDS.includes(baseEntry.resource);
   const isHeroReward = baseEntry.resource === 'hero';
+  const isGemsReward = baseEntry.resource === 'gems';
 
   // Level scaling only makes sense for a resource *quantity* (5 eggs
-  // -> 12 eggs -> ...). A discrete reward's (item or hero) amount is
-  // a count that scaling would turn into a fractional-then-rounded
-  // value with no game-design intent behind it ("1.75 keys", "2
-  // heroes from one spin") — so non-resource rewards always pay out
-  // exactly baseEntry.amount, unscaled.
+  // -> 12 eggs -> ...). A discrete reward's (item, hero, or gems)
+  // amount is a count that scaling would turn into a
+  // fractional-then-rounded value with no game-design intent behind
+  // it ("1.75 keys", "2 heroes from one spin", "8.25 gems") — so
+  // non-resource rewards always pay out exactly baseEntry.amount,
+  // unscaled.
   const scale = isRawResource ? getRewardScale(townHallLevel) : 1;
   const amount = Math.max(1, Math.round(baseEntry.amount * scale));
 
@@ -162,6 +184,8 @@ export function spinWheel(state, resourceState, inventoryState, rosterState, now
   } else if (isHeroReward) {
     rolledHero = createRolledHero();
     rosterState.roster.push(rolledHero);
+  } else if (isGemsReward) {
+    gemsState.gems += amount;
   } else {
     inventoryState[baseEntry.resource] = (inventoryState[baseEntry.resource] || 0) + amount;
   }

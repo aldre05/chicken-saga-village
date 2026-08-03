@@ -516,7 +516,7 @@ function updateWheelModalInfo() {
 wheelSpinBtn.addEventListener('click', () => {
   if (wheelSpinning) return;
   const now = Date.now();
-  const reward = spinWheel(gameState.luckyWheel, gameState.resources, gameState.inventory, gameState.heroes, now, gameState.townHall.level);
+  const reward = spinWheel(gameState.luckyWheel, gameState.resources, gameState.inventory, gameState.heroes, gameState, now, gameState.townHall.level);
 
   if (!reward) {
     wheelResultTextEl.textContent = 'No tickets left!';

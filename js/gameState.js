@@ -27,7 +27,11 @@ export function createGameState() {
     luckyWheel: createLuckyWheelState(),
     upkeep: createUpkeepState(),
     heroes: createHeroRosterState(),
-    popularity: 0
+    popularity: 0,
+    // Premium currency — openspec/changes/add-gems-currency/. Simple
+    // integer, no sub-structure needed (one currency, no "gem
+    // types"), same shape as popularity above.
+    gems: 0
   };
 }
 
@@ -105,7 +109,8 @@ export function loadGameState() {
         ...parsed.heroes,
         roster: Array.isArray(parsed.heroes && parsed.heroes.roster) ? parsed.heroes.roster : fresh.heroes.roster
       },
-      popularity: typeof parsed.popularity === 'number' ? parsed.popularity : 0
+      popularity: typeof parsed.popularity === 'number' ? parsed.popularity : 0,
+      gems: typeof parsed.gems === 'number' ? parsed.gems : 0
     };
 
     // Heroes recruited before the dungeon-failure and hero-classes

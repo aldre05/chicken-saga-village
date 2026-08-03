@@ -1,6 +1,6 @@
 # Chicken Saga Village — Project Memory
 
-_Last updated: 2026-08-02_
+_Last updated: 2026-08-03_
 
 ## Current Objective
 Build "Chicken Village" — a free, Pixiland-genre-inspired (not
@@ -10,66 +10,43 @@ tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
 localStorage only (no backend/accounts yet).
 
 ## Current Status
-**(2026-08-02, Code Reviewer — fresh clone confirmed, HEAD `56539b0`,
-moved on from the `685ab75` a prior session last saw.)** Both
-`add-dungeon-keys` and `add-recruit-via-lucky-wheel` now have their
-Code Reviewer sections (3.x) signed off. All 5 previously-stale
-`openspec/changes/` folders flagged in the last session's notes are
-now confirmed actually gone (someone used a real delete action, not
-another manual re-upload) — that recurring failure mode is resolved,
-at least for this instance of it. The `add-dungeon-keys`/
-`add-recruit-via-lucky-wheel` `proposal.md` duplicate-content bug
-flagged last session is still present (confirmed via `diff`, byte-for-
-byte identical) — still not mine to guess-fix, still needs a re-upload
-from whoever owns the proposal content.
+**Documentation & Testing is done for both `add-dungeon-keys` and
+`add-recruit-via-lucky-wheel`.** Both `openspec/changes/` folders have
+been archived (deleted); their content is fully merged into
+`openspec/specs/dungeon-system`, `crafting-system`, `hero-system`, and
+`lucky-wheel`. All 17 previously-failing tests (the expected fallout
+from both proposals' coordinated `sendHeroToDungeon`/`spinWheel`
+signature changes) are fixed, not skipped — full suite is 233/233,
+up from 195/212 at session start. Also resolved the `RECRUIT_COST`/
+`canRecruitHero` dead-code question Backend explicitly deferred:
+decided to keep them as supported internals (documented rationale in
+hero-system spec and below), not delete them.
 
-**Full suite is 195/212, not the 212/212 a prior session reported —
-this is expected, not a new regression.** Both proposals' Backend work
-changed `sendHeroToDungeon`/`canSendHeroToDungeon` and `spinWheel()` to
-require new params (`inventoryState`, `rosterState`) — a signature
-change each `design.md` explicitly flagged as needing every call site
-updated, same precedent as `add-hero-classes`'s `getCraftableRecipes`
-change. `test/dungeons.test.js` and `test/luckyWheel.test.js` still
-call the old signatures, so their calls silently misalign arguments.
-Traced all 17 failures to this one cause (not 17 different problems);
-none are unrelated breakage. This is Documentation & Testing's task
-4.1/4.2 for each proposal, not fixed by this session — see each
-proposal's tasks.md 3.4 note for the full trace.
-
-See "Code Reviewer Session: Dungeon Keys + Recruit-via-Lucky-Wheel
-(2026-08-02)" below for full verification detail.
+**The `add-dungeon-keys`/`add-recruit-via-lucky-wheel` `proposal.md`
+duplicate-content bug, flagged open across the last 2 sessions, is now
+moot** — both folders (including the duplicate `proposal.md` files)
+were deleted entirely as part of this session's standard archive step.
+Nothing further to do there; the underlying content was never the
+source this session's spec-writing relied on (used `design.md`,
+`tasks.md`, and the actual shipped source code instead, consistent
+with this project's "verify against the code, not the docs" habit).
 
 ## Active Tasks
-1. Documentation & Testing passes for both `add-dungeon-keys` and
-   `add-recruit-via-lucky-wheel` — this is now the actual next step,
-   not blocked on anything: update `test/dungeons.test.js` and
-   `test/luckyWheel.test.js`'s call sites for the new required params
-   (the 17 currently-failing tests, all traced and expected — see
-   Current Status), add the new coverage tasks 4.1/4.2 call for
-   (0-key rejection, key consumption, hero-reward spin shape/cost),
-   update `openspec/specs/dungeon-system/spec.md` and
-   `openspec/specs/hero-system/spec.md`/`lucky-wheel/spec.md`, resolve
-   the `RECRUIT_COST`/`canRecruitHero` dead-code question (task 4.4 —
-   confirmed this session they're NOT dead, `heroes.test.js`/
-   `dungeons.test.js` still call `recruitHero()` directly, so removal
-   would break those tests too unless those are updated in the same
-   pass), and finally archive both `openspec/changes/` folders into
-   `openspec/specs/` once done.
-2. **Still open, not touched this session (unrelated to what was
-   reviewed):** the `add-dungeon-keys`/`add-recruit-via-lucky-wheel`
-   `proposal.md` duplicate-content bug — confirmed still present.
-3. **Still open — found by a prior session, not fixed by anyone yet:**
+1. **Still open — found by a prior session, not fixed by anyone yet:**
    `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
-   `requestAnimationFrame` timestamp instead of `Date.now()`.
-4. Real art integration (still 100% placeholder) — unchanged.
-5. **Playtest all 6 shipped features in an actual browser** (Heal
-   Potion/downed-state/click-to-open/TH10 from before, plus dungeon
-   keys + wheel-only recruiting now) — still nobody has actually
-   clicked through this live; verified so far via a mix of persistent
-   tests, scripted logic-level checks, direct code review, and one
-   prior session's temporary jsdom smoke test.
-6. jsdom-as-committed-devDependency question from last session — still
-   undecided, still flagging rather than silently deciding either way.
+   `requestAnimationFrame` timestamp instead of `Date.now()`. This is
+   now flagged across 4+ sessions without anyone picking it up — worth
+   a session specifically dedicated to it rather than continuing to
+   note it in passing.
+2. Real art integration (still 100% placeholder) — unchanged.
+3. **Playtest all 6 shipped features in an actual browser** (Heal
+   Potion/downed-state/click-to-open/TH10, dungeon keys, wheel-only
+   recruiting) — still nobody has actually clicked through this live;
+   verified so far via a mix of persistent tests, scripted logic-level
+   checks, direct code review, and one prior session's temporary jsdom
+   smoke test.
+4. jsdom-as-committed-devDependency question — still undecided, still
+   flagging rather than silently deciding either way.
 
 ## Code Reviewer Session: Dungeon Keys + Recruit-via-Lucky-Wheel (2026-08-02)
 Fresh clone per standing instruction, HEAD `56539b0` (moved on from
@@ -2148,3 +2125,121 @@ application), not meant to live in the repo.
   requested order (dungeon-keys, then recruit-via-lucky-wheel) are
   now backend-complete. No other `openspec/changes/` proposals remain
   as of this session.
+- **2026-08-03 (Documentation & Testing — Dungeon Keys +
+  Recruit-via-Lucky-Wheel)**: Fresh clone per standing instruction
+  (explicit again this session — the exact practice that's kept the
+  stale-folder issue from recurring, still worth restating every
+  time). Confirmed the current HEAD matches what the Code Reviewer
+  session last saw; both proposals' `tasks.md` had Backend/Frontend/
+  Code Reviewer sections fully checked, only Documentation & Testing
+  (4.x) open on each.
+
+  Read both `design.md`s and the actual shipped source
+  (`dungeons.js`, `luckyWheel.js`, `heroes.js`, `crafting.js`,
+  relevant `main.js` sections) directly before touching any test or
+  spec — not `proposal.md`, which both sessions before this one had
+  already flagged as byte-for-byte duplicate/wrong content between
+  the two folders. Deleting both folders as this session's own
+  archive step made that flagged bug moot rather than something to
+  keep carrying forward — noted the resolution explicitly rather than
+  silently dropping the flag.
+
+  **Fixed all 17 previously-failing tests** (not skipped): both
+  `test/dungeons.test.js` and `test/luckyWheel.test.js` had call
+  sites for `sendHeroToDungeon`/`canSendHeroToDungeon`/`spinWheel`
+  using the pre-signature-change argument lists. Rewrote both files'
+  call sites for the new required `inventoryState`/`rosterState`
+  params — used a `fundedInventory()` helper (10 dungeon keys) for
+  `dungeons.test.js` so every pre-existing test kept testing what it
+  originally tested, rather than manually threading a key count
+  through 15+ unrelated call sites; key-gating-specific tests pass a
+  deliberately low/empty inventory instead. Also fixed the
+  `luckyWheel.test.js` test that asserted every `REWARD_TABLE` entry
+  is a raw resource — no longer true (`dungeon_key`, `hero`) — into a
+  three-way check (resource / known item / the literal `'hero'` id).
+
+  **New coverage added**, not just the minimum to turn tests green:
+  `dungeons.test.js` gained a dedicated "dungeon key gating" describe
+  block (0-key rejection with an otherwise-perfect hero, explicit
+  `dungeon_key: 0` vs. absent-key equivalence, independence from
+  `entryCost` gating, exactly-one-key-consumed-per-send regardless of
+  tier, no refund on failure, no double-spend on success, a
+  2-heroes-1-key exhaustion scenario). `luckyWheel.test.js` gained a
+  deterministic reward-branch suite (mocked `Math.random` forced to
+  land on specific `REWARD_TABLE` entries, rather than relying on
+  enough random samples to probabilistically hit each branch) covering
+  the resource/key/hero branches independently — including confirming
+  a hero-reward spin spends nothing beyond its ticket (no accidental
+  double-charge against the old `RECRUIT_COST`) and produces a
+  field-for-field complete hero object, and that key/hero rewards stay
+  unscaled by Town Hall level even at TH5 where a resource reward
+  would be 3.25x. `heroes.test.js` gained a dedicated
+  `createRolledHero()` describe block — direct coverage (shape,
+  rarity-boundary determinism, distribution, zero resources needed)
+  independent of `recruitHero()`'s wrapper, plus a test cross-checking
+  both construction paths produce field-for-field identical output
+  under the same pinned `Math.random`. `crafting.test.js` gained a
+  pinning test for the `dungeon_key` recipe's actual (developer-
+  deviated) cost, distinct from `design.md`'s original suggestion.
+  Suite finished at **233/233 passing** (was 195/212 at session
+  start).
+
+  **Resolved the `RECRUIT_COST`/`canRecruitHero`/`recruitHero`
+  dead-code question** Backend explicitly deferred (task 1.3/4.4,
+  "flag for Documentation & Testing to decide, not deciding
+  unilaterally"): decided to KEEP all three as supported internals,
+  not delete them. Reasoning (also written into hero-system spec so
+  it doesn't need re-litigating next time someone notices they're
+  unreachable from the UI): `recruitHero()` is a correct, harmless,
+  already-tested wrapper around `createRolledHero()`, not dead
+  scaffolding; `heroes.test.js`/`dungeons.test.js` use it as
+  convenient roster-setup in tests unrelated to what those tests are
+  actually about, and rewriting every such call site would be pure
+  churn; and deleting a working cost-gated recruit path on the theory
+  that "nothing calls it in production now" throws away a real
+  capability a future session might deliberately want back (e.g. a
+  paid-recruit option alongside the wheel) for no benefit. Confirmed
+  via grep that `main.js` has zero remaining references to any of the
+  three, so this was a real question worth answering explicitly, not
+  a formality.
+
+  **Checked (not just assumed clean) whether `README.md`/
+  `docs/ARCHITECTURE.md` reference the old paid-recruit flow**, per
+  the prior Backend session's own note flagging this as worth
+  checking — grepped both for "recruit"/"barracks"; the only hit was
+  README's module-list description of `heroes.js` ("weighted-rarity
+  recruitment"), which is still accurate regardless of entry point
+  (wheel vs. button) and needed no change. Nothing stale found; no
+  edit needed, but confirmed rather than skipped.
+
+  Updated `openspec/specs/dungeon-system/spec.md` (new "Dungeon Key —
+  consumable run gate" section, including the TH4-Dungeon-Gate-vs-
+  TH5-rice/ore-unlock side effect called out as known-not-a-bug),
+  `crafting-system/spec.md` (Dungeon Key recipe row + its own cost-
+  deviation paragraph), `hero-system/spec.md` (recruitment section
+  rewritten for wheel-only sourcing, the `createRolledHero()`/
+  `recruitHero()` split, and the dead-code decision above), and
+  `lucky-wheel/spec.md` (non-resource reward branches, the
+  Town-Hall-scaling exemption for discrete rewards, cross-references
+  to the hero-shape-parity guarantee). Deleted both
+  `openspec/changes/` folders per the standard archive step —
+  `add-dungeon-keys/` and `add-recruit-via-lucky-wheel/`.
+
+  Verification: `node --check` on every `js/*.js` file, full suite
+  233/233 passing, confirmed at multiple checkpoints as tests were
+  added file-by-file rather than only once at the end. No push
+  credentials in this sandbox (same as every prior session); packaged
+  as a patch + zip for manual application. Files modified:
+  `test/dungeons.test.js`, `test/luckyWheel.test.js`,
+  `test/heroes.test.js`, `test/crafting.test.js`,
+  `openspec/specs/dungeon-system/spec.md`,
+  `openspec/specs/crafting-system/spec.md`,
+  `openspec/specs/hero-system/spec.md`,
+  `openspec/specs/lucky-wheel/spec.md`, `memory.md`. Folders deleted:
+  `openspec/changes/add-dungeon-keys/`,
+  `openspec/changes/add-recruit-via-lucky-wheel/`.
+  **Next recommended task:** `applyUpkeep()`'s clock-mismatch bug is
+  still the single most concrete, actionable, repeatedly-flagged item
+  with nobody assigned to it — 4+ sessions have now noted it without
+  anyone picking it up. Otherwise: an actual human playtest of
+  everything shipped so far, and a decision on the jsdom question.

@@ -3,23 +3,55 @@
 ## Current State (implemented)
 The first "second loop" system beyond the village economy — originally
 shipped via `add-heroes-dungeons`, then extended by `add-hero-classes`
-(class/equipment) and `add-dungeon-failure` (downed state/healing).
-All three proposals are fully merged into this spec; their
+(class/equipment), `add-dungeon-failure` (downed state/healing), and
+`add-recruit-via-lucky-wheel` (recruitment source — see below). All
+four proposals are fully merged into this spec; their
 `openspec/changes/` folders have been archived (deleted) per this
 project's standard process. Free, non-NFT in-game data only.
 
-### Barracks (recruitment)
-A building, unlock-gated like any other: Town Hall 3, cost
-`{egg: 50, feathers: 30}` (`buildingUnlocks.js`'s `UNLOCK_CONFIG`).
-Not a leveled/upgradable building — recruiting is a repeatable action
-paced by resource cost, not a building level, same spirit as Lucky
-Wheel spins being paced by ticket regen rather than a cooldown.
+### Recruitment — Lucky Wheel only (`add-recruit-via-lucky-wheel`)
+**Heroes are recruited exclusively via the Lucky Wheel now, not paid
+directly at the Barracks.** See lucky-wheel spec for the wheel's
+`hero` reward-table entry. This replaced the original design (a
+Recruit button at the Barracks, cost `{egg: 15, feathers: 20}`).
 
-Standing near an unlocked Barracks shows a persistent panel: a
-Recruit button (cost `{egg: 15, feathers: 20}`, `RECRUIT_COST` in
-`heroes.js`, disabled if unaffordable) and a live roster list showing
-every recruited hero's rarity icon, name, level, power, and
-idle/busy status (with a live countdown while busy).
+The Barracks building itself is unchanged otherwise: unlock-gated at
+Town Hall 3, cost `{egg: 50, feathers: 30}`
+(`buildingUnlocks.js`'s `UNLOCK_CONFIG`). Standing near it still shows
+the roster management panel — every recruited hero's rarity icon,
+name, level, power, idle/busy status (with a live countdown while
+busy), plus heal/equip actions — it just no longer has a Recruit
+button. An empty roster shows "No heroes yet — win one on the Lucky
+Wheel." instead of a call-to-action button, so the panel never reads
+as broken or incomplete.
+
+**`createRolledHero()` vs. `recruitHero()` — a real split, not a
+rename.** `createRolledHero()` is the pure, cost-free hero-
+construction logic (rarity/class roll + fresh-hero shape) that the
+Lucky Wheel's hero-reward branch calls directly — the wheel spin
+already consumed a ticket to get here, so charging `RECRUIT_COST` on
+top would double-charge. `recruitHero(rosterState, resourceState)` is
+kept as a thin wrapper around it (cost check + spend +
+`createRolledHero()` + push) — same exact behavior it always had.
+
+**`recruitHero()`/`RECRUIT_COST`/`canRecruitHero` are deliberately
+KEPT, not deleted, even though nothing in `main.js` calls any of them
+anymore** (confirmed via grep — zero production-UI references left).
+Decision, made by Documentation & Testing per this exact question
+being explicitly flagged rather than resolved by Backend: kept as
+supported internals because (a) `recruitHero()` is a correct, harmless
+wrapper with its own real behavior worth continuing to guarantee, not
+just test scaffolding; (b) this project's test suite
+(`test/heroes.test.js`, `test/dungeons.test.js`) uses it as a
+convenient one-call way to populate a funded roster for setup code
+unrelated to what those tests are actually about — rewriting every
+such call site to `createRolledHero()` + manual roster push would be
+pure churn; (c) deleting a working, tested, cost-gated recruit path on
+the theory that "nothing calls it now" removes a real capability a
+future session might deliberately want back (e.g. reintroducing a
+paid recruit option alongside the wheel) without rebuilding it from
+scratch. If a future session wants to actually remove it, that should
+be its own deliberate call.
 
 ### Rarity & stats
 Weighted roll (`RARITY_TABLE` in `heroes.js`) using the same
@@ -187,6 +219,13 @@ accepted gap since the roster was new enough at the time these changes
 shipped that no real save data existed yet to migrate).
 
 ## Constraints for future changes
+- Keep `createRolledHero()` (cost-free construction) and
+  `recruitHero()` (cost-checking wrapper around it) as a genuine split,
+  not re-merged — the Lucky Wheel's hero-reward branch depends on
+  being able to create a hero without a resource-spend check. Any new
+  hero-creation path (a future event reward, a quest reward, etc.)
+  should call `createRolledHero()` directly, the same way the wheel
+  does, rather than adding a third parallel construction function.
 - Keep rarity/weighted-roll logic reusing `luckyWheel.js`'s
   `pickWeighted()` — don't fork a second copy of that algorithm. Class
   assignment deliberately does NOT use this — it's uniform random, not

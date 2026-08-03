@@ -23,9 +23,25 @@ Current recipes (`crafting.js`'s `RECIPES`):
 | Armor | 10 ore, 10 stone |
 | Boots | 3 plank, 5 feathers |
 | Heal Potion | 10 rice |
+| Dungeon Key | 40 egg, 40 feathers, 30 wood, 30 rice, 30 stone, 20 ore |
 
 Crafted items go to `gameState.inventory` (a simple `{itemId: count}`
 dict), separate from the main resource HUD.
+
+**Dungeon Key's cost deliberately spans all 6 resources — a
+developer-requested deviation from `add-dungeon-keys/design.md`'s
+original suggestion** (`{wood: 20, stone: 20, ore: 10}`, industrial-
+lane only). The developer explicitly wanted every resource to have
+crafting utility, not just wood/stone/ore. Documented inline in
+`crafting.js` and pinned against the actual shipped value (not the
+superseded suggestion) in `test/crafting.test.js`. **Known side
+effect, not a bug**: rice and ore don't unlock until Town Hall 5, but
+the Dungeon Gate that consumes this key unlocks at TH4 — so a player
+genuinely cannot craft (or therefore use) a Dungeon Key until TH5, one
+full Town Hall level after the building that needs it becomes
+available. Flagged for awareness, left as the developer's explicit
+choice rather than silently adjusted. See dungeon-system spec for the
+key's actual gating mechanics.
 
 **Refined goods now have a purpose — resolved by `add-hero-classes`.**
 The last 6 recipes above (Sword/Bow/Staff/Armor/Boots/Heal Potion) are

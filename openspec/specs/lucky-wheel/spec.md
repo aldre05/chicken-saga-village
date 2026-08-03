@@ -39,11 +39,46 @@
   an already-decided result, not a suspense mechanic with real stakes.
 - **Rewards scale with Town Hall level** (1x at TH2 up to 3.25x at
   TH5) — added after early feedback that fixed small rewards felt
-  pointless once resource counts got large.
+  pointless once resource counts got large. This scaling applies to
+  raw-resource rewards only (see below).
+- **Reward table now includes non-resource rewards, not just raw
+  resources** (`add-dungeon-keys`, `add-recruit-via-lucky-wheel`):
+  a `dungeon_key` inventory item (weight 5) and a `hero` recruitment
+  (weight 4, rarer than a key, since a hero is the bigger prize).
+  `spinWheel()`'s reward-branch logic distinguishes three cases by
+  `entry.resource`'s identity: a raw resource (in `RESOURCE_IDS`) adds
+  to `resourceState.carried`; `dungeon_key` (or any future crafted-
+  item reward) adds to `inventoryState` via the same resource-vs-item
+  distinction `crafting.js`'s `splitCost()` draws; the literal string
+  `'hero'` is a dedicated branch that calls `heroes.js`'s
+  `createRolledHero()` and pushes the result onto `rosterState.roster`
+  directly rather than incrementing any count. This required
+  `spinWheel()` to gain required `inventoryState`/`rosterState`
+  params (signature change, not additive-only — same precedent as
+  `add-hero-classes`' `getCraftableRecipes` change; every call site
+  needed updating, both in `main.js` and the test suite).
+- **Non-resource rewards are NEVER Town-Hall-level-scaled.** A key or
+  a hero is a discrete count/event, not a quantity — "1.75 keys" or
+  "2 heroes from one spin" has no game-design meaning the way "12 eggs
+  instead of 5" does. `getRewardScale()` is applied only when
+  `entry.resource` is a raw resource; key/hero rewards always pay out
+  exactly `baseEntry.amount` (1 for both) regardless of Town Hall
+  level.
+- Winning a hero via the wheel produces the exact same hero shape as
+  the old paid Barracks recruit path did (field-for-field identical,
+  test-verified) — see hero-system spec for the
+  `createRolledHero()`/`recruitHero()` split that guarantees this.
 - Purely non-monetary: no real tickets-for-cash, no gacha-for-money,
   no PvP "steal" item. This was a deliberate design choice to prove
   out the engagement loop for free before any monetization
   conversation, which stays deferred pending legal review regardless.
+  This now extends to hero recruitment too — heroes are a gacha-style
+  reward, but still entirely free, no real-money gacha mechanics.
+- Landing on a hero (vs. a resource reward) gets a distinctly different
+  visual/popup treatment, not just different text — same principle
+  already applied to dungeon success vs. failure popups (see
+  dungeon-system spec) — since it's the biggest possible spin outcome
+  and should read as a genuinely different moment.
 
 ## Constraints for future changes
 - If a "buy tickets with real money" or gacha-adjacent feature is ever
@@ -58,3 +93,13 @@
   reintroduce gradient-baked divider bands or an X-component label
   offset without re-verifying against every segment, not just the
   one being eyeballed during a quick check.
+- Keep the resource/item/hero reward-branch logic as one shared
+  conditional chain inside `spinWheel()`, not three separately-
+  maintained implementations — a future non-resource reward type
+  should extend this same chain (using the `RESOURCE_IDS`-membership
+  test as the resource/item split, and a dedicated identity check like
+  `'hero'` for anything that isn't a stackable count) rather than
+  bolting on a fourth parallel branch structure.
+- Keep non-resource reward amounts exempt from `getRewardScale()` —
+  don't scale a discrete item/hero count just because resource rewards
+  do.

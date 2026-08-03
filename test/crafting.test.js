@@ -56,6 +56,18 @@ describe('crafting.js', () => {
     }
   });
 
+  test('dungeon_key recipe matches the ACTUAL shipped cost, a deliberate developer-requested deviation from design.md\'s original suggestion', () => {
+    // add-dungeon-keys' design.md originally suggested
+    // {wood:20, stone:20, ore:10} (industrial-lane only). The
+    // developer explicitly asked for a cost spanning all 6 resources
+    // instead, so every resource has crafting utility -- pinning the
+    // real, attributed value here (not the superseded suggestion),
+    // per crafting.js's own comment on this recipe.
+    const recipe = getRecipeById('dungeon_key');
+    assert.ok(recipe, 'expected a "dungeon_key" recipe to exist');
+    assert.deepEqual(recipe.cost, { egg: 40, feathers: 40, wood: 30, rice: 30, stone: 30, ore: 20 });
+  });
+
   test('createInventoryState starts empty', () => {
     assert.deepEqual(createInventoryState(), {});
   });

@@ -17,6 +17,7 @@ import {
   createHeroRosterState,
   canRecruitHero,
   recruitHero,
+  createRolledHero,
   effectivePower,
   xpForNextLevel,
   isHeroBusy,
@@ -137,6 +138,100 @@ describe('heroes.js', () => {
     assert.ok(Math.abs(counts.epic / N - 0.10) < 0.04, `epic ratio off: ${counts.epic / N}`);
   });
 
+  // createRolledHero() (add-recruit-via-lucky-wheel) is the cost-free
+  // hero-construction logic split out of recruitHero() specifically so
+  // luckyWheel.js's hero-reward branch can create a hero without going
+  // through a resource-spend check (the wheel already charged a
+  // ticket to get here). recruitHero() is now a thin wrapper: cost
+  // check + spend + createRolledHero() + push. Tested directly here
+  // (not just indirectly via recruitHero(), which the tests above
+  // already exercise) so createRolledHero()'s own shape/distribution
+  // guarantees hold independent of recruitHero()'s cost-checking
+  // wrapper — this is exactly the function luckyWheel.js calls.
+  describe('createRolledHero (cost-free hero construction, used directly by the Lucky Wheel)', () => {
+    test('produces the correct fresh-hero shape with zero cost/resources involved', () => {
+      const hero = createRolledHero();
+      assert.equal(hero.level, 1);
+      assert.equal(hero.xp, 0);
+      assert.equal(hero.busyUntil, null);
+      assert.equal(hero.dungeonTier, null);
+      assert.ok(['common', 'rare', 'epic'].includes(hero.rarity));
+      assert.ok(HERO_CLASS_IDS.includes(hero.class));
+      assert.equal(hero.currentHp, getMaxHp(hero));
+      assert.deepEqual(hero.equipment, { weapon: null, armor: null, boots: null });
+      assert.equal(typeof hero.name, 'string');
+      assert.ok(hero.id.startsWith('hero_'));
+    });
+
+    test('rarity roll uses the same RARITY_TABLE cumulative-weight boundaries as recruitHero (deterministic via mocked Math.random)', (t) => {
+      const cases = [
+        [0, 'common'], [0.59999, 'common'],
+        [0.6, 'rare'], [0.89999, 'rare'],
+        [0.9, 'epic'], [0.99999, 'epic']
+      ];
+      const originalRandom = Math.random;
+      t.after(() => { Math.random = originalRandom; });
+      for (const [randomValue, expectedRarity] of cases) {
+        Math.random = () => randomValue;
+        const hero = createRolledHero();
+        assert.equal(hero.rarity, expectedRarity, `Math.random()=${randomValue} should yield ${expectedRarity}, got ${hero.rarity}`);
+      }
+    });
+
+    test('rarity distribution roughly matches 60/30/10 weights over many rolls, with no resources spent at all', () => {
+      const counts = { common: 0, rare: 0, epic: 0 };
+      const N = 4000;
+      for (let i = 0; i < N; i++) {
+        counts[createRolledHero().rarity] += 1;
+      }
+      assert.ok(Math.abs(counts.common / N - 0.60) < 0.05, `common ratio off: ${counts.common / N}`);
+      assert.ok(Math.abs(counts.rare / N - 0.30) < 0.05, `rare ratio off: ${counts.rare / N}`);
+      assert.ok(Math.abs(counts.epic / N - 0.10) < 0.04, `epic ratio off: ${counts.epic / N}`);
+    });
+
+    test('produces field-for-field identical output to recruitHero (same object shape regardless of which path a hero came from)', (t) => {
+      const originalRandom = Math.random;
+      t.after(() => { Math.random = originalRandom; });
+      Math.random = () => 0.5; // pin to a fixed roll -- same rarity/class/name-index for both calls
+
+      const rolled = createRolledHero();
+
+      Math.random = () => 0.5; // reset the sequence so recruitHero() sees the exact same rolls
+      const roster = createHeroRosterState();
+      const recruited = recruitHero(roster, fundedResources());
+
+      assert.equal(rolled.rarity, recruited.rarity);
+      assert.equal(rolled.class, recruited.class);
+      assert.equal(rolled.name, recruited.name);
+      assert.equal(rolled.level, recruited.level);
+      assert.equal(rolled.xp, recruited.xp);
+      assert.equal(rolled.currentHp, recruited.currentHp);
+      assert.deepEqual(rolled.equipment, recruited.equipment);
+      assert.deepEqual(Object.keys(rolled).sort(), Object.keys(recruited).sort(), 'both construction paths must produce the exact same field set');
+    });
+  });
+
+  // DECISION (Documentation & Testing, per add-recruit-via-lucky-wheel
+  // task 1.3/4.4): recruitHero()/RECRUIT_COST/canRecruitHero are kept
+  // as supported internals, NOT deleted as dead code, even though the
+  // Barracks recruit button (their only production-UI caller) was
+  // removed by that change's Frontend task. Confirmed via grep that
+  // main.js has zero remaining references to any of the three. Kept
+  // because: (a) recruitHero() is a correct, harmless thin wrapper
+  // around createRolledHero() with its own real behavior (cost
+  // checking) worth continuing to guarantee, not just test scaffolding;
+  // (b) this test file and dungeons.test.js both use it as a
+  // convenient one-call way to populate a funded roster for setup code
+  // unrelated to what those tests are actually about, and rewriting
+  // every one of those call sites to `createRolledHero()` + manual
+  // `roster.roster.push()` would be pure churn with no functional
+  // benefit; (c) deleting a working, tested function on the theory
+  // that "nothing in production calls it anymore" removes a real
+  // capability (a cost-gated recruit path) that a future session might
+  // deliberately want back (e.g. reintroducing a paid recruit option
+  // alongside the wheel) without it having to be rebuilt from scratch.
+  // If a future session wants to actually remove it, that should be
+  // its own deliberate call, not a side effect of this one.
   test('effectivePower at level 1 equals basePower exactly', () => {
     assert.equal(effectivePower({ rarity: 'common', level: 1 }), 15);
     assert.equal(effectivePower({ rarity: 'rare', level: 1 }), 25);

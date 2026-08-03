@@ -1,14 +1,29 @@
 # Tasks: Crafting Cost + Use-Case Rebalance
 
 ## Backend Engineer
-- [ ] 1.0 **Blocked until design.md's Open Questions are answered** —
+- [x] 1.0 **Blocked until design.md's Open Questions are answered** —
       confirm with the developer which items and what shape (cost
       increase vs. new use-case vs. both) before writing any code
-- [ ] 1.1 Update `crafting.js` `RECIPES` costs per the confirmed
+      (Developer confirmed: both refined goods AND equipment;
+      cost-increase-only, no new use-case; target multiple given as
+      an illustrative example, not a literal figure to calibrate
+      against — see memory.md 2026-08-03 entry for the exact numbers
+      chosen and reasoning.)
+- [x] 1.1 Update `crafting.js` `RECIPES` costs per the confirmed
       answer
-- [ ] 1.2 If a new use-case was chosen: implement it in whichever
+      (Also found design.md's own "Context" baseline is stale — it
+      doesn't match the live file, describing a refined-goods supply
+      chain (sword costing ingot, staff costing chicken_feed, etc.)
+      that was never actually implemented. Verified and rebalanced
+      against the REAL live costs instead. Side finding: brick/ingot
+      have zero consumers anywhere even after this change — worse
+      than design.md's own "thin use-case" framing assumed. Not
+      fixed, since developer chose cost-increase-only this pass; see
+      memory.md.)
+- [x] 1.2 If a new use-case was chosen: implement it in whichever
       module it touches (Town Hall upgrade cost, quest requirement,
       etc.)
+      (N/A — developer explicitly chose cost-increase-only.)
 
 ## Frontend Engineer
 - [ ] 2.1 Verify updated costs render correctly in the Workbench

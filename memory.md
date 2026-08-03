@@ -2243,3 +2243,166 @@ application), not meant to live in the repo.
   with nobody assigned to it — 4+ sessions have now noted it without
   anyone picking it up. Otherwise: an actual human playtest of
   everything shipped so far, and a decision on the jsdom question.
+- **2026-08-03 (Backend Engineer — 4 new proposals found, 1 completed:
+  Crafting Cost Rebalance)**: Fresh clone confirmed live state (per
+  standing instruction, stated again this session). Found 4 new
+  `openspec/changes/` proposals: `add-crafting-cost-rebalance`,
+  `add-gems-currency`, `add-tiered-production-scaling`,
+  `fix-panel-click-reliability`. 3 of 4 explicitly gate Backend on a
+  developer decision before writing code (crafting-cost-rebalance's
+  1.0, tiered-production-scaling's 1.1 magnitude confirmation,
+  panel-click-reliability's 1.1 live-browser root-cause confirmation
+  — the last one I flagged as something I can't do myself, no browser
+  in this sandbox). Only `add-gems-currency` was unblocked
+  (dependencies already shipped, its own open questions explicitly
+  "tune later, don't block"). Developer asked me to work through all
+  of them, asking questions where needed rather than stopping at the
+  first gate — this entry covers the first one resolved.
+
+  **Crafting Cost Rebalance — developer decisions obtained:** both
+  refined goods (nest_charm/basket/chicken_feed) AND equipment
+  (sword/bow/staff/armor/boots) are underpowered; cost-increase-only,
+  no new use-case. Target multiple: developer initially gave a
+  concrete example ("a full day of farming should only afford ~10
+  dungeon keys, and pouring resources into keys should mean you can't
+  also craft everything else") but then clarified this was
+  illustrative, not a literal number to calibrate against with real
+  production-rate math — so implemented as a clear, documented
+  multiple instead of computing an exact daily-production total:
+  refined goods ~7-9x their previous cost (they were previously
+  4-5 total resources, a rounding error), equipment ~2.5x (already
+  non-trivial, but the developer was clear it should increase too,
+  not stay flat while only refined goods moved).
+
+  **Found design.md's own "Context" baseline is stale** before
+  touching any number — it shows a refined-goods supply chain
+  (`sword: {ingot:4, wood:2}`, `staff: {plank:3, chicken_feed:2}`,
+  etc.) that doesn't match the live `crafting.js` at all (real:
+  `sword: {ore:15, wood:5}`, `staff: {wood:10, stone:10}` — equipment
+  bypasses refined goods almost entirely, boots→plank is the only
+  refined-good-as-equipment-input link that actually exists).
+  Verified and rebalanced against the real live costs, not the doc.
+  **Direct consequence surfaced, not fixed** (developer chose
+  cost-increase-only): `brick` and `ingot` have literally zero
+  consumers anywhere in `crafting.js` even after this rebalance —
+  worse than design.md's own "thin use-case" framing assumed (it's
+  not thin, it's nonexistent). Flagged clearly rather than silently
+  leaving it undiscussed, since a future session or the developer
+  might want to revisit whether that's acceptable.
+
+  New costs implemented in `crafting.js`: `nest_charm`
+  `{egg:20, feathers:15}`, `basket` `{egg:15, wood:20}`,
+  `chicken_feed` `{rice:35}`, `sword` `{ore:35, wood:15}`, `bow`
+  `{wood:35, feathers:20}`, `staff` `{wood:25, stone:25}`, `armor`
+  `{ore:25, stone:25}`, `boots` `{plank:6, feathers:15}`. Left
+  untouched (confirmed out of scope, not just assumed): `heal_potion`
+  (consumable, not named in either category), `plank`/`brick`/`ingot`
+  (crafting intermediates, not the "3 non-equipment refined goods"
+  design.md's Goals section actually named), `dungeon_key` (separate
+  proposal, already shipped).
+
+  **Verification:** `node --check` on `crafting.js`. Full suite:
+  229/233 (4 failures, all in `crafting.test.js`, all pinning the old
+  cost numbers by name — "exist with the exact costs from design.md,"
+  and 3 Boots tests funding the old `plank:3, feathers:5` amount;
+  *expected* fallout from a deliberate rebalance, Documentation &
+  Testing's job to update, not touched here). Functional simulation
+  (thrown away after use, with a real `process.exit(1)` pass/fail
+  gate): every new cost matches exactly; the *old* nest_charm cost is
+  now correctly rejected as insufficient; the new cost is exactly
+  affordable when funded exactly; Boots' mixed resource+item cost
+  correctly requires the new 6-plank amount (3 plank alone, the old
+  requirement, now correctly fails) and consumes all of both pools on
+  craft; every out-of-scope item confirmed genuinely unchanged
+  (heal_potion, plank/brick/ingot, dungeon_key).
+  Files modified: `js/crafting.js`.
+  **Next backend task:** the other 3 proposals from this session's
+  discovery — `add-gems-currency` (unblocked, next up),
+  `add-tiered-production-scaling` (still needs the ~74,000/min
+  magnitude confirmed), `fix-panel-click-reliability` (still needs a
+  live-browser root-cause confirmation I can't perform myself).
+- **2026-08-03 (Backend Engineer — Gems Currency, tasks 1.1-1.5)**:
+  Second proposal completed this session (same fresh clone as
+  crafting-cost-rebalance above). This was the one unblocked proposal
+  of the 4 found — dependencies (`add-dungeon-keys`,
+  `add-recruit-via-lucky-wheel`) both already shipped, confirmed
+  before starting.
+
+  **Found and resolved a real internal contradiction in design.md**
+  before writing any code: its Data Model section specifies `gems: 0`
+  as a flat top-level field on `gameState` (matching this project's
+  existing `popularity` precedent), but its own Spend Use-Cases code
+  snippet shows `buyHeroRollWithGems(gemsState, rosterState)` using
+  `gemsState.gems -=`, which only makes sense if gems were wrapped in
+  its own sub-object. Resolved in favor of the flat field (task 1.1's
+  literal wording, and consistency with `popularity`), with every buy/
+  exchange function instead accepting "any object exposing a mutable
+  `.gems` number" — in practice always `gameState` itself, since a
+  raw JS number can't be mutated by reference the way
+  `resourceState.carried`/`inventoryState` sub-objects can. Documented
+  this resolution identically in all 3 files that needed it
+  (`dungeons.js`, `heroes.js`, `luckyWheel.js`) so it doesn't need
+  re-discovering.
+
+  Implemented all 5 tasks: `gameState.js` (`gems: 0` in
+  `createGameState()`, number-typed guard in `loadGameState()`,
+  identical shape to `popularity`'s existing handling); `dungeons.js`
+  (`DUNGEON_KEY_GEM_COST` placeholder=25, `canBuyDungeonKeyWithGems`/
+  `buyDungeonKeyWithGems` pair); `heroes.js`
+  (`HERO_ROLL_GEM_COST` placeholder=100, `canBuyHeroRollWithGems`/
+  `buyHeroRollWithGems` pair — **deliberate deviation from design.md's
+  snippet**: returns the actual hero object instead of a bare `true`,
+  matching `recruitHero()`/`spinWheel()`'s hero branch, both of which
+  return the hero so a UI can show what was rolled; a boolean would
+  throw away exactly the information a "buy a roll" button needs to
+  display); `resources.js` (`GEM_TO_RESOURCE_RATE`=10 placeholder,
+  `canExchangeGemsForResource`/`exchangeGemsForResource` — verified
+  first, not assumed, that `carried` resources are never capped
+  anywhere in this codebase (only a building's *uncollected* buffer
+  is), so the exchange credits `carried` uncapped, matching every
+  other reward-crediting path); `luckyWheel.js` (gems REWARD_TABLE
+  entry per design.md exactly, weight 6/amount 5).
+
+  **Caught a real bug before it shipped, not after:** `spinWheel()`'s
+  existing branch structure was `isRawResource -> resourceState`,
+  `isHeroReward -> rosterState`, else `-> inventoryState`. Without an
+  explicit gems check, a `gems` reward (not in `RESOURCE_IDS`, not
+  `'hero'`) would have silently matched that `else` catch-all and
+  written into `inventoryState.gems` — a phantom inventory item,
+  never touching the actual currency at all. Added a dedicated
+  `isGemsReward` branch ahead of the catch-all; confirmed via
+  simulation that `inventoryState.gems` stays `undefined` across 3000
+  spins while `gemsState.gems` accumulates correctly. This is exactly
+  why task 1.5 said "coordinate rather than tripling the branching
+  logic" — a 4th reward type added blind, without re-reading the
+  existing chain's shape, would have shipped broken.
+
+  Required a new `gemsState` param on `spinWheel()` (5th positional
+  arg now) — updated its one real call site in `main.js`, passing
+  `gameState` itself.
+
+  **Verification:** `node --check` on all 5 touched files. Full
+  suite: 227/233 (6 failures — the same 4 pre-existing
+  crafting-cost-rebalance failures from earlier this session, plus 2
+  new in `luckyWheel.test.js`: a stale REWARD_TABLE-entry-enum test
+  not yet aware of `'gems'`, and a stale `spinWheel()` call site
+  missing the new `gemsState` positional arg — both the same expected-
+  fallout pattern as every prior signature/table change, Documentation
+  & Testing's job to update, not touched here). Functional simulation
+  (thrown away after use, real `process.exit(1)` pass/fail gate):
+  `gameState.gems` defaults to 0; both buy-with-gems pairs correctly
+  reject-then-accept at the exact cost boundary and deduct/grant
+  exactly; `buyHeroRollWithGems` confirmed to return a real hero
+  object, not a boolean; the resource exchange rejects an unknown
+  resource id and an over-balance request, then succeeds and credits
+  at the exact configured rate; 3000 simulated spins confirmed gems
+  land in `gemsState.gems` at the exact per-landing amount and never
+  once in `inventoryState.gems`.
+  Files modified: `js/gameState.js`, `js/dungeons.js`, `js/heroes.js`,
+  `js/resources.js`, `js/luckyWheel.js`, `js/main.js`.
+  **Next backend task:** 2 proposals from this session's discovery
+  still need developer input before Backend can proceed —
+  `add-tiered-production-scaling` (confirm the ~74,000/min level-50
+  magnitude) and `fix-panel-click-reliability` (confirm the root
+  cause against a live browser session — genuinely can't do this
+  myself from this sandbox, no browser access).

@@ -1,19 +1,36 @@
 # Tasks: Gems (Premium Currency)
 
 ## Backend Engineer
-- [ ] 1.1 Add `gems` field to `gameState.js` (default 0, included in
+- [x] 1.1 Add `gems` field to `gameState.js` (default 0, included in
       save/load)
-- [ ] 1.2 Implement `canBuyDungeonKeyWithGems`/spend-and-grant pair in
+- [x] 1.2 Implement `canBuyDungeonKeyWithGems`/spend-and-grant pair in
       `dungeons.js` per design.md (requires `add-dungeon-keys` to have
       landed first — sequence accordingly)
-- [ ] 1.3 Implement `buyHeroRollWithGems` in `heroes.js` per design.md
+      (add-dungeon-keys had already landed, confirmed. Found
+      design.md's Data Model section (`gems: 0` flat field) disagrees
+      with its own Spend Use-Cases snippet (`gemsState.gems -=`,
+      implying a wrapper object) — resolved in favor of the flat
+      field per task 1.1's literal wording; buy functions take
+      whatever object gems actually lives on (in practice, gameState
+      itself). See memory.md for the full note.)
+- [x] 1.3 Implement `buyHeroRollWithGems` in `heroes.js` per design.md
       (requires `add-recruit-via-lucky-wheel`'s `createRolledHero()`
       to exist — sequence accordingly)
-- [ ] 1.4 Implement gems-to-resource exchange in `resources.js`
-- [ ] 1.5 Add the gems Lucky Wheel reward entry + the resource-vs-gems
+      (Already existed, confirmed. DELIBERATE DEVIATION from
+      design.md's snippet: returns the actual hero object, not a bare
+      `true` — matches every sibling "roll a hero" path in this
+      codebase, so a gem-purchase button can show what was rolled.)
+- [x] 1.4 Implement gems-to-resource exchange in `resources.js`
+- [x] 1.5 Add the gems Lucky Wheel reward entry + the resource-vs-gems
       branch `spinWheel()` needs (same shape of change as the
       dungeon-key and hero reward branches if those shipped first —
       coordinate rather than tripling the same branching logic)
+      (Caught a real bug before it shipped: without an explicit
+      'gems' check, a gems reward would have silently fallen into the
+      existing generic item catch-all branch and written into
+      `inventoryState.gems` instead of the actual currency. Added a
+      dedicated branch ahead of the catch-all; verified via
+      simulation that gems never appear in inventoryState.)
 
 ## Frontend Engineer
 - [ ] 2.1 Gems balance in the resource HUD

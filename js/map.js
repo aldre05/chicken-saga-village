@@ -161,12 +161,11 @@ export const interactables = [
   // house_6/7/8 mirror house_1/3/5's column (c9-10) shifted 3 cols
   // west (c6-7) — same row triplet (11-12 / 14-15 / 17-18), clear of
   // the pond (c3-7, r3-6 — different rows) and the vertical path
-  // (col15 — different col). house_9/10 go east of the Town Hall
-  // cluster instead (c17-21 is already full) — checked against the
-  // decorative tree spots at [16,23]/[17,24] (house_10 shifted to
-  // c25-26 specifically to clear the [16,23] tree it would otherwise
-  // overlap at c23) and against woodshed/mine's resource-cluster
-  // footprints (different rows, no overlap).
+  // (col15 — different col). house_9/10 originally went east of the
+  // Town Hall cluster (c23/r12, c25/r15) — see the comment further
+  // below, right above their actual placement, for why they were
+  // later moved into this same grid by fix-panel-click-reliability
+  // task 1.4 instead.
   makeInteractable({
     id: 'house_6', name: 'House 6',
     col: 6, row: 11, tileWidth: 2, tileHeight: 2,
@@ -182,14 +181,38 @@ export const interactables = [
     col: 6, row: 17, tileWidth: 2, tileHeight: 2,
     color: '#9c6a4a', dialogue: "The village is really taking shape."
   }),
+  // fix-panel-click-reliability task 1.4: house_9/10 originally sat
+  // east of the Town Hall cluster (c23/r12 and c25/r15) — moved into
+  // House 1-8's own grid instead, per that task's explicit
+  // instruction, not left where they were. The existing grid is
+  // columns {6, 9, 12} x rows {11, 14, 17} (9 slots, 1-tile gaps
+  // between columns) — 8 of 9 slots were filled, with col9/row17
+  // the only genuinely empty one (house_5 sits at col12/row17,
+  // house_8 at col6/row17, nothing at col9/row17). house_9 fills
+  // that real gap exactly.
+  // house_10 needed a 10th slot the existing 3x3 grid doesn't have.
+  // A 4th ROW isn't possible — MAP_ROWS is 20 (indices 0-19), row19
+  // is the solid border-tree row, so row20 would be entirely off the
+  // map. Checked squeezing a column between the house grid (ends at
+  // col12-13) and the vertical path (col15) — col13 is already
+  // house_2's/house_4's/house_5's own footprint (col12, tileWidth 2
+  // = cols12-13) at every one of the 3 house rows, so there's no
+  // free column between the grid and the path at any row. Extended
+  // WEST to col3 instead, staying in the row17 group (matching
+  // house_9's row), keeping the same 1-tile-gap spacing every other
+  // column pair in this grid already uses (col5 gap between house_8
+  // at c6-7 and house_9 at c9-10 mirrors this). Checked against the
+  // pond (rows3-6, cols3-7 — same column range but a completely
+  // different row range, no overlap at row17) and the left border
+  // (col0 — col3 leaves cols1-2 as clear buffer).
   makeInteractable({
     id: 'house_9', name: 'House 9',
-    col: 23, row: 12, tileWidth: 2, tileHeight: 2,
+    col: 9, row: 17, tileWidth: 2, tileHeight: 2,
     color: '#9c6a4a', dialogue: "Nearly a proper town now."
   }),
   makeInteractable({
     id: 'house_10', name: 'House 10',
-    col: 25, row: 15, tileWidth: 2, tileHeight: 2,
+    col: 3, row: 17, tileWidth: 2, tileHeight: 2,
     color: '#9c6a4a', dialogue: "The final house. Quite the village you've built."
   }),
   makeInteractable({

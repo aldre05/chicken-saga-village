@@ -665,42 +665,75 @@ function updatePromptUI(nearest, selected) {
   updateDungeonPanel(panelTarget);
 }
 
+// Signature of the last DOM rebuild per gated panel — see
+// fix-panel-click-reliability/design.md. Root cause (confirmed by
+// tracing loop() -> updatePromptUI() -> these functions: called
+// unconditionally every animation frame, ~60x/sec, no throttle):
+// each of these did `someListEl.innerHTML = ''` then recreated every
+// button with a fresh click listener, every single frame, even when
+// nothing changed. A human click is a mousedown/mouseup pair
+// spanning several real-world frames, so the button that received
+// mousedown was frequently already destroyed and replaced by the
+// time mouseup fired — per the DOM spec, click only fires when both
+// land on the same node, so the click silently vanished. Fix (Option
+// 1 of design.md's 3, the one it recommends as smallest-diff): only
+// rebuild when a signature capturing everything that could visibly
+// change actually changes, not every frame. `updateBuildingPanel`
+// deliberately has NO such gate — traced separately and confirmed it
+// only ever mutates already-existing static elements
+// (getElementById'd once at module load, listener attached once at
+// line ~309), never recreates nodes, so it was never affected by
+// this bug and doesn't need this treatment.
+let craftingPanelSignature = null;
+
 function updateCraftingPanel(target) {
   const showPanel = target && target.id === 'workbench' && isBuildingUnlocked(gameState.buildingUnlocks, 'workbench');
 
   if (!showPanel) {
     craftingPanelEl.classList.add('hidden');
+    craftingPanelSignature = null;
     return;
   }
 
-  craftingRecipeListEl.innerHTML = '';
-  for (const recipe of RECIPES) {
-    const row = document.createElement('div');
-    row.className = 'crafting-recipe-row';
+  // Only the SET of currently-affordable recipe ids affects what's
+  // visually different (each button's disabled state) — resource
+  // amounts change continuously via passive collection, but the
+  // button only needs to change when affordability actually flips
+  // for some recipe, not on every tiny amount tick.
+  const affordableIds = getCraftableRecipes(gameState.resources, gameState.inventory).map(r => r.id).join(',');
+  const signature = `${target.id}|${affordableIds}`;
 
-    const costText = formatCostHTML(recipe.cost);
-    const info = document.createElement('div');
-    info.className = 'crafting-recipe-info';
-    info.innerHTML = `<span class="crafting-recipe-name">${recipe.name}</span><span class="crafting-recipe-cost">${costText}</span>`;
+  if (signature !== craftingPanelSignature) {
+    craftingPanelSignature = signature;
+    craftingRecipeListEl.innerHTML = '';
+    for (const recipe of RECIPES) {
+      const row = document.createElement('div');
+      row.className = 'crafting-recipe-row';
 
-    const btn = document.createElement('button');
-    btn.className = 'crafting-craft-btn';
-    btn.textContent = 'Craft';
-    const affordable = getCraftableRecipes(gameState.resources, gameState.inventory).some(r => r.id === recipe.id);
-    btn.disabled = !affordable;
-    btn.addEventListener('click', () => {
-      const ok = craftSpecific(gameState.resources, gameState.inventory, recipe.id);
-      if (ok) {
-        gameState.popularity += 1;
-        spawnFloatingPopup(`Crafted ${recipe.name}! 🔨`, player.x + PLAYER_SPRITE_SIZE / 2, player.y);
-      }
-      updateResourceHud();
-      updateCraftingPanel(target);
-    });
+      const costText = formatCostHTML(recipe.cost);
+      const info = document.createElement('div');
+      info.className = 'crafting-recipe-info';
+      info.innerHTML = `<span class="crafting-recipe-name">${recipe.name}</span><span class="crafting-recipe-cost">${costText}</span>`;
 
-    row.appendChild(info);
-    row.appendChild(btn);
-    craftingRecipeListEl.appendChild(row);
+      const btn = document.createElement('button');
+      btn.className = 'crafting-craft-btn';
+      btn.textContent = 'Craft';
+      const affordable = getCraftableRecipes(gameState.resources, gameState.inventory).some(r => r.id === recipe.id);
+      btn.disabled = !affordable;
+      btn.addEventListener('click', () => {
+        const ok = craftSpecific(gameState.resources, gameState.inventory, recipe.id);
+        if (ok) {
+          gameState.popularity += 1;
+          spawnFloatingPopup(`Crafted ${recipe.name}! 🔨`, player.x + PLAYER_SPRITE_SIZE / 2, player.y);
+        }
+        updateResourceHud();
+        updateCraftingPanel(target);
+      });
+
+      row.appendChild(info);
+      row.appendChild(btn);
+      craftingRecipeListEl.appendChild(row);
+    }
   }
 
   craftingPanelEl.classList.remove('hidden');
@@ -812,60 +845,98 @@ function buildHeroManagePanel(hero, target) {
   return panel;
 }
 
+let heroPanelSignature = null;
+
 function updateHeroPanel(target) {
   const showPanel = target && target.id === 'barracks' && isBuildingUnlocked(gameState.buildingUnlocks, 'barracks');
 
   if (!showPanel) {
     heroPanelEl.classList.add('hidden');
+    heroPanelSignature = null;
     return;
   }
 
   const now = Date.now();
 
-  heroRosterListEl.innerHTML = '';
-  if (gameState.heroes.roster.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'hero-roster-empty';
-    empty.textContent = 'No heroes yet — win one on the Lucky Wheel.';
-    heroRosterListEl.appendChild(empty);
-  } else {
-    for (const hero of gameState.heroes.roster) {
-      const downed = isDowned(hero);
-      const expanded = selectedRosterHeroId === hero.id;
+  // Signature captures every piece of state that could visibly change
+  // a roster row or the expanded manage panel — see updateCraftingPanel's
+  // comment above for the full root-cause/fix explanation (same
+  // pattern here). Deliberately includes:
+  // - per-hero level/xp/downed/busy (any of these changing needs a
+  //   rebuild)
+  // - secondsLeft bucketed to whole seconds (Math.ceil), not raw ms —
+  //   a busy hero's countdown text needs to keep refreshing, but only
+  //   needs to visibly tick once per second, not 60x/sec; this is
+  //   also what keeps the residual click-race risk on a busy hero's
+  //   row negligible (~16ms out of every 1000ms, not every frame)
+  // - equipment per slot (equip/unequip changes this)
+  // - healAffordable, computed per downed hero rather than including
+  //   raw resource amounts — same reasoning as Crafting's
+  //   affordable-SET approach, avoids rebuilding on every passive
+  //   resource tick that doesn't actually cross the heal-cost
+  //   threshold
+  // - inventorySig: raw counts of every equipment item + heal potion,
+  //   which is what the EXPANDED hero's manage panel's Equip
+  //   buttons/potion count actually depend on
+  const relevantItemIds = [...Object.keys(EQUIPMENT_ITEMS), HEAL_POTION_ITEM_ID];
+  const inventorySig = relevantItemIds.map(id => `${id}:${gameState.inventory[id] || 0}`).join(',');
+  const rosterSig = gameState.heroes.roster.map(hero => {
+    const busy = isHeroBusy(hero, now);
+    const downed = isDowned(hero);
+    const secondsLeft = busy ? Math.ceil((hero.busyUntil - now) / 1000) : 0;
+    const equipSig = EQUIPMENT_SLOTS.map(slot => hero.equipment[slot] || '-').join(',');
+    const healAffordable = downed ? canHealHero(hero, gameState.resources) : false;
+    return `${hero.id}:${hero.level}:${hero.xp}:${downed}:${busy}:${secondsLeft}:${equipSig}:${healAffordable}`;
+  }).join('|');
+  const signature = `${target.id}|${selectedRosterHeroId}|${rosterSig}|${inventorySig}`;
 
-      const row = document.createElement('button');
-      row.className = 'hero-roster-row' + (downed ? ' hero-roster-row-downed' : '') + (expanded ? ' hero-roster-row-expanded' : '');
-      row.addEventListener('click', () => {
-        selectedRosterHeroId = expanded ? null : hero.id;
-        updateHeroPanel(target);
-      });
+  if (signature !== heroPanelSignature) {
+    heroPanelSignature = signature;
+    heroRosterListEl.innerHTML = '';
+    if (gameState.heroes.roster.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'hero-roster-empty';
+      empty.textContent = 'No heroes yet — win one on the Lucky Wheel.';
+      heroRosterListEl.appendChild(empty);
+    } else {
+      for (const hero of gameState.heroes.roster) {
+        const downed = isDowned(hero);
+        const expanded = selectedRosterHeroId === hero.id;
 
-      const power = Math.round(effectivePower(hero));
-      const equipIcons = EQUIPMENT_SLOTS.map(slot => hero.equipment[slot] ? iconFor(hero.equipment[slot]) : '').filter(Boolean).join(' ');
-      const info = document.createElement('div');
-      info.className = 'hero-roster-info';
-      info.innerHTML = `<span class="hero-roster-name">${HERO_RARITY_ICON[hero.rarity]} ${HERO_CLASS_ICON[hero.class]} ${hero.name}</span>` +
-        `<span class="hero-roster-stats">Lv.${hero.level} · ⚔️${power} power${equipIcons ? ' · ' + equipIcons : ''}</span>`;
+        const row = document.createElement('button');
+        row.className = 'hero-roster-row' + (downed ? ' hero-roster-row-downed' : '') + (expanded ? ' hero-roster-row-expanded' : '');
+        row.addEventListener('click', () => {
+          selectedRosterHeroId = expanded ? null : hero.id;
+          updateHeroPanel(target);
+        });
 
-      const busy = isHeroBusy(hero, now);
-      const status = document.createElement('span');
-      if (downed) {
-        status.className = 'hero-roster-status hero-status-downed';
-        status.textContent = '💀 Downed';
-      } else if (busy) {
-        status.className = 'hero-roster-status hero-status-busy';
-        status.textContent = `${formatDuration(hero.busyUntil - now)} left`;
-      } else {
-        status.className = 'hero-roster-status hero-status-idle';
-        status.textContent = 'Idle';
-      }
+        const power = Math.round(effectivePower(hero));
+        const equipIcons = EQUIPMENT_SLOTS.map(slot => hero.equipment[slot] ? iconFor(hero.equipment[slot]) : '').filter(Boolean).join(' ');
+        const info = document.createElement('div');
+        info.className = 'hero-roster-info';
+        info.innerHTML = `<span class="hero-roster-name">${HERO_RARITY_ICON[hero.rarity]} ${HERO_CLASS_ICON[hero.class]} ${hero.name}</span>` +
+          `<span class="hero-roster-stats">Lv.${hero.level} · ⚔️${power} power${equipIcons ? ' · ' + equipIcons : ''}</span>`;
 
-      row.appendChild(info);
-      row.appendChild(status);
-      heroRosterListEl.appendChild(row);
+        const busy = isHeroBusy(hero, now);
+        const status = document.createElement('span');
+        if (downed) {
+          status.className = 'hero-roster-status hero-status-downed';
+          status.textContent = '💀 Downed';
+        } else if (busy) {
+          status.className = 'hero-roster-status hero-status-busy';
+          status.textContent = `${formatDuration(hero.busyUntil - now)} left`;
+        } else {
+          status.className = 'hero-roster-status hero-status-idle';
+          status.textContent = 'Idle';
+        }
 
-      if (expanded) {
-        heroRosterListEl.appendChild(buildHeroManagePanel(hero, target));
+        row.appendChild(info);
+        row.appendChild(status);
+        heroRosterListEl.appendChild(row);
+
+        if (expanded) {
+          heroRosterListEl.appendChild(buildHeroManagePanel(hero, target));
+        }
       }
     }
   }
@@ -873,30 +944,48 @@ function updateHeroPanel(target) {
   heroPanelEl.classList.remove('hidden');
 }
 
+let dungeonTierListSignature = null;
+let dungeonHeroListSignature = null;
+
 function updateDungeonPanel(target) {
   const showPanel = target && target.id === 'dungeon_gate' && isBuildingUnlocked(gameState.buildingUnlocks, 'dungeon_gate');
 
   if (!showPanel) {
     dungeonPanelEl.classList.add('hidden');
+    dungeonTierListSignature = null;
+    dungeonHeroListSignature = null;
     return;
   }
 
   const now = Date.now();
 
-  // --- Tier picker ---
-  dungeonTierListEl.innerHTML = '';
-  for (const tierId of DUNGEON_TIER_IDS) {
-    const tier = DUNGEON_TIERS[tierId];
-    const btn = document.createElement('button');
-    btn.className = 'dungeon-tier-btn' + (tierId === selectedDungeonTierId ? ' selected' : '');
-    btn.innerHTML = `${tier.label}<span class="dungeon-tier-meta">⚔️${tier.difficulty} needed</span>`;
-    btn.addEventListener('click', () => {
-      selectedDungeonTierId = tierId;
-      updateDungeonPanel(target);
-    });
-    dungeonTierListEl.appendChild(btn);
+  // --- Tier picker --- gated (see updateCraftingPanel's comment for
+  // the full root-cause/fix explanation): only rebuilds the tier
+  // buttons when which tier is selected actually changes, instead of
+  // recreating them every frame.
+  const tierListSignature = selectedDungeonTierId;
+  if (tierListSignature !== dungeonTierListSignature) {
+    dungeonTierListSignature = tierListSignature;
+    dungeonTierListEl.innerHTML = '';
+    for (const tierId of DUNGEON_TIER_IDS) {
+      const tier = DUNGEON_TIERS[tierId];
+      const btn = document.createElement('button');
+      btn.className = 'dungeon-tier-btn' + (tierId === selectedDungeonTierId ? ' selected' : '');
+      btn.innerHTML = `${tier.label}<span class="dungeon-tier-meta">⚔️${tier.difficulty} needed</span>`;
+      btn.addEventListener('click', () => {
+        selectedDungeonTierId = tierId;
+        updateDungeonPanel(target);
+      });
+      dungeonTierListEl.appendChild(btn);
+    }
   }
 
+  // --- Everything below is unchanged from before this fix: these all
+  // mutate already-existing static elements (dungeonEntryCostEl,
+  // dungeonKeyCountEl, etc.) rather than recreating DOM nodes, so
+  // they were never affected by the per-frame-rebuild bug and don't
+  // need a signature gate — same reasoning as updateBuildingPanel
+  // being unaffected. ---
   const selectedTier = getDungeonTier(selectedDungeonTierId);
   dungeonEntryCostEl.innerHTML = formatCostHTML(selectedTier.entryCost);
   const keyCount = gameState.inventory[DUNGEON_KEY_ITEM_ID] || 0;
@@ -918,31 +1007,48 @@ function updateDungeonPanel(target) {
   if (selectedHeroId && !sendableHeroes.some(h => h.id === selectedHeroId)) selectedHeroId = null;
   if (!selectedHeroId && sendableHeroes.length > 0) selectedHeroId = sendableHeroes[0].id;
 
-  dungeonHeroListEl.innerHTML = '';
-  if (gameState.heroes.roster.length === 0) {
-    const empty = document.createElement('div');
-    empty.className = 'dungeon-hero-empty';
-    empty.textContent = 'No heroes recruited — visit the Barracks first.';
-    dungeonHeroListEl.appendChild(empty);
-  } else if (sendableHeroes.length === 0) {
-    const anyDowned = gameState.heroes.roster.some(isDowned);
-    const empty = document.createElement('div');
-    empty.className = 'dungeon-hero-empty';
-    empty.textContent = anyDowned
-      ? 'Every idle hero is downed — heal at the Barracks first.'
-      : 'All heroes are on a mission.';
-    dungeonHeroListEl.appendChild(empty);
-  } else {
-    for (const hero of sendableHeroes) {
-      const power = Math.round(effectivePower(hero));
-      const btn = document.createElement('button');
-      btn.className = 'dungeon-hero-btn' + (hero.id === selectedHeroId ? ' selected' : '');
-      btn.innerHTML = `${hero.name}<span class="dungeon-hero-power">⚔️${power}</span>`;
-      btn.addEventListener('click', () => {
-        selectedHeroId = hero.id;
-        updateDungeonPanel(target);
-      });
-      dungeonHeroListEl.appendChild(btn);
+  // --- Hero picker --- gated the same way as the tier picker.
+  // Signature captures: total roster size (empty vs nonempty changes
+  // which empty-state message shows), each sendable hero's id+power
+  // (power can change from leveling while idle — XP grants can chain
+  // multiple level-ups), which one is selected, and whether any hero
+  // is downed (changes the empty-state message when sendableHeroes is
+  // empty but the roster isn't).
+  const anyDowned = gameState.heroes.roster.some(isDowned);
+  const heroListSignature = [
+    gameState.heroes.roster.length,
+    sendableHeroes.map(h => `${h.id}:${Math.round(effectivePower(h))}`).join(','),
+    selectedHeroId,
+    anyDowned
+  ].join('|');
+
+  if (heroListSignature !== dungeonHeroListSignature) {
+    dungeonHeroListSignature = heroListSignature;
+    dungeonHeroListEl.innerHTML = '';
+    if (gameState.heroes.roster.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dungeon-hero-empty';
+      empty.textContent = 'No heroes recruited — visit the Barracks first.';
+      dungeonHeroListEl.appendChild(empty);
+    } else if (sendableHeroes.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'dungeon-hero-empty';
+      empty.textContent = anyDowned
+        ? 'Every idle hero is downed — heal at the Barracks first.'
+        : 'All heroes are on a mission.';
+      dungeonHeroListEl.appendChild(empty);
+    } else {
+      for (const hero of sendableHeroes) {
+        const power = Math.round(effectivePower(hero));
+        const btn = document.createElement('button');
+        btn.className = 'dungeon-hero-btn' + (hero.id === selectedHeroId ? ' selected' : '');
+        btn.innerHTML = `${hero.name}<span class="dungeon-hero-power">⚔️${power}</span>`;
+        btn.addEventListener('click', () => {
+          selectedHeroId = hero.id;
+          updateDungeonPanel(target);
+        });
+        dungeonHeroListEl.appendChild(btn);
+      }
     }
   }
 

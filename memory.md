@@ -2528,3 +2528,62 @@ application), not meant to live in the repo.
   have had their Backend Engineer portions addressed or are blocked
   purely on developer input already given. Tiered-production-scaling
   needs the actual reduced percentages designed next.
+- **2026-08-03 (Backend Engineer — Tiered Production Scaling, tasks
+  1.1-1.3)**: Fourth and final proposal from this session's discovery,
+  now complete. Developer's first answer was "too high, reduce the
+  percentages" (design.md's original 10%/15%/20% produces ~74,000/min
+  at level 50, 192x current ~385/min). Computed 4 concrete candidate
+  percentage sets with a real script (not hand math) and presented
+  their actual level 9/20/35/50 outputs side by side, rather than
+  asking the developer to evaluate raw percentages in the abstract:
+  - A — Halved (5%/7.5%/10%): lvl50 ≈ 1,753/min (4.6x current)
+  - B — Flatten late-game only (10%/10%/8%): lvl50 ≈ 1,813/min (4.7x)
+  - C — Gentle taper (8%/6%/5%): lvl50 ≈ 451/min (1.2x)
+  - D — Keep early feel, cut late (10%/8%/6%): lvl50 ≈ 845/min (2.2x)
+
+  Developer picked A (5%/7.5%/10%) and it was implemented and
+  verified first. **Developer then explicitly reconsidered and asked
+  "what if we go by what's pointed in design.md" — confirmed (after
+  I restated exactly what that meant: the original 10%/15%/20%,
+  ~74,000/min at level 50, the same magnitude already flagged once)
+  that the ORIGINAL magnitude is the intended target after all.**
+  Reverted Option A and re-implemented design.md's exact percentages,
+  unmodified — this is the actual final state, not Option A. Flagging
+  the back-and-forth explicitly here so nobody reading this later
+  assumes Option A is what shipped.
+
+  Implemented in `buildingLevels.js`: replaced the old linear-per-tier
+  `rateMultiplierForLevel` with the compounding formula design.md
+  specified (a loop multiplying by `(1+growthPerLevel)` per level,
+  tier picked by which bracket the level falls in) — design.md's
+  10%/15%/20% tiers exactly, no modification.
+
+  **Verification (done twice — once for Option A, again after the
+  revert):** `node --check` on `buildingLevels.js` both times. Full
+  suite both times: 226/233 (7 failures — the same 6 pre-existing
+  from earlier this session, plus 1: `buildingLevels.test.js`'s
+  "rateMultiplierForLevel is 1 at level 1 and continuous across tier
+  boundaries" pins the OLD linear formula's exact output values;
+  *expected* fallout from a deliberate formula swap either way,
+  Documentation & Testing's job to update, not touched here). Task
+  1.3's spot-check on the FINAL (reverted) formula: level 5 ≈ 44/min,
+  level 15 ≈ 149/min, level 25 ≈ 777/min, level 35 ≈ 4,810/min —
+  cross-checked against design.md's own stated checkpoints (level
+  9≈64, level 19≈260, level 20≈312, level 50≈74,107) with a real
+  `process.exit(1)` pass/fail gate, all matching within rounding.
+  Verified tier-boundary step ratios are exactly 1.15 at level 9->10
+  and exactly 1.20 at level 19->20 (both transitions land on the
+  correct level, no off-by-one). Re-confirmed design.md's own cap
+  non-binding conclusion directly at this exact magnitude rather than
+  trusting it secondhand: cap at level 50 is ~115M, an hour of
+  production at the new ~74,107/min rate is ~4.45M — over 25x
+  headroom, caps genuinely don't bind.
+  Files modified: `js/buildingLevels.js`.
+  **Next backend task:** none queued. All 4 proposals discovered at
+  the start of this session (crafting-cost-rebalance, gems-currency,
+  panel-click-reliability, tiered-production-scaling) now have their
+  Backend Engineer portions fully complete. No other
+  `openspec/changes/` proposals remain as of this session. The
+  long-flagged `applyUpkeep()` clock-mismatch bug (4+ sessions noted,
+  still nobody assigned) remains the most notable unowned item if a
+  future session has no queued proposal to pick up.

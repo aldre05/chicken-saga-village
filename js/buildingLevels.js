@@ -61,26 +61,37 @@ export function getMaxWorkers(buildingId, buildingLevels) {
   return Math.min(MAX_WORKER_SLOTS, BASE_WORKER_SLOTS + (level - 1) * WORKER_SLOTS_PER_LEVEL);
 }
 
-// Rate scaling: tiered, steeper at higher levels — a level-40 building
-// should feel dramatically stronger than a level-10 one, not just
-// proportionally. Piecewise-linear and continuous across tier
-// boundaries (each tier picks up exactly where the last left off).
-const RATE_TIERS = [
-  { uptoLevel: 10, bonusPerLevel: 0.15 },
-  { uptoLevel: 20, bonusPerLevel: 0.20 },
-  { uptoLevel: 30, bonusPerLevel: 0.25 },
-  { uptoLevel: Infinity, bonusPerLevel: 0.30 }
+// Rate scaling: tiered COMPOUNDING growth (not linear-per-tier) — per
+// openspec/changes/add-tiered-production-scaling/. Each level
+// multiplies the previous level's rate by (1 + growthPerLevel) for
+// its tier, rather than adding a flat bonus — "lvl 2 = past level's
+// rate + 10%" means rate(2) = rate(1) * 1.10, a fundamentally
+// steeper shape than the old additive formula it replaces.
+//
+// DECISION HISTORY (see memory.md for the full trace): design.md
+// flagged that these exact percentages (10%/15%/20%) produce
+// ~74,000/min at level 50 — 192x the old formula's ~385/min — as
+// worth a developer gut-check before building, not because the
+// percentages were ambiguous. Developer's first answer was "too
+// high, reduce the percentages"; 4 reduced candidate sets were
+// computed and presented (their actual level 9/20/35/50 outputs, not
+// raw percentages in the abstract), and the developer picked one
+// (5%/7.5%/10%, ~1,753/min at level 50) and it was briefly
+// implemented. Developer then explicitly reconsidered and confirmed
+// the ORIGINAL ~74,000/min magnitude is the intended target after
+// all — this is that final, confirmed decision: design.md's
+// percentages exactly, unmodified.
+const COMPOUND_RATE_TIERS = [
+  { uptoLevel: 9, growthPerLevel: 0.10 },   // levels 2-9
+  { uptoLevel: 19, growthPerLevel: 0.15 },  // levels 10-19
+  { uptoLevel: Infinity, growthPerLevel: 0.20 } // level 20+
 ];
 
 export function rateMultiplierForLevel(level) {
   let multiplier = 1;
-  let fromLevel = 1;
-  for (const tier of RATE_TIERS) {
-    if (level <= fromLevel) break;
-    const levelsInTier = Math.min(level, tier.uptoLevel) - fromLevel;
-    multiplier += levelsInTier * tier.bonusPerLevel;
-    fromLevel += levelsInTier;
-    if (level <= tier.uptoLevel) break;
+  for (let lvl = 2; lvl <= level; lvl++) {
+    const tier = COMPOUND_RATE_TIERS.find(t => lvl <= t.uptoLevel);
+    multiplier *= (1 + tier.growthPerLevel);
   }
   return multiplier;
 }

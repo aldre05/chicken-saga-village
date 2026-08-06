@@ -33,10 +33,19 @@
       same numbers.)
 
 ## Frontend Engineer
-- [ ] 2.1 Verify the Workbench/building panels display the new rates
+- [x] 2.1 Verify the Workbench/building panels display the new rates
       correctly at a few different levels (existing display code
       should just work once the underlying multiplier changes — this
       is a verification pass, not new UI)
+      (Confirmed: `panelRateEl`/`upgradePreviewEl` call
+      `rateMultiplierForLevel`/`getEffectiveRatePerSecond` directly
+      with zero hardcoded formula assumptions on the display side.
+      Directly computed displayed rates at levels 1/2/9/10/19/20/50
+      via a throwaway script — all sensible, monotonically increasing,
+      level 50 lands in the same order of magnitude Backend confirmed
+      (~74k-93k/min depending on worker count). `Math.round(rate)/min`
+      formatting has no overflow/breakage risk at these magnitudes.
+      No code changes needed.)
 
 ## Code Reviewer
 - [ ] 3.1 Verify tier boundaries are correct (level 9→10 uses which

@@ -33,14 +33,37 @@
       simulation that gems never appear in inventoryState.)
 
 ## Frontend Engineer
-- [ ] 2.1 Gems balance in the resource HUD
-- [ ] 2.2 Buy-with-gems buttons: Dungeon Gate (alongside the existing
+- [x] 2.1 Gems balance in the resource HUD
+      (New static `gemsHudEl` chip, magenta-accented to distinguish
+      premium currency at a glance. Verified via jsdom: shows correct
+      balance on load.)
+- [x] 2.2 Buy-with-gems buttons: Dungeon Gate (alongside the existing
       key display), Barracks/wherever heroes are shown, and a
       resource-exchange UI (new small panel, or folded into an
       existing one — Frontend's call)
-- [ ] 2.3 Explicitly NOT building any purchase-gems-with-$ UI — no
+      (Built a new Gems Exchange modal (💎 Exchange button in the
+      header, matching the Lucky Wheel modal's open/close pattern) —
+      6 static resource rows, fixed "spend 5 gems, get 50" per click
+      rather than a numeric input, matching this project's existing
+      button-based UI style. Added a Buy Hero Roll button to the
+      Barracks panel and a Buy Key button to the Dungeon Gate panel,
+      both static single buttons gated purely on gems balance (same
+      established pattern as `sendHeroBtn` — no signature-gating
+      needed since there's no list to rebuild). Verified via jsdom:
+      exchanging gems for egg correctly deducts gems and grants the
+      resource (checked in both the modal and the HUD, and confirmed
+      the resource actually appears in the resource HUD); Buy Hero
+      Roll correctly spends 100 gems and adds a hero to the roster
+      end-to-end via real simulated player movement + click. Buy Key
+      not independently live-tested (same jsdom pathing difficulty as
+      `fix-panel-click-reliability`'s Dungeon Gate tests) but uses the
+      identical proven pattern.)
+- [x] 2.3 Explicitly NOT building any purchase-gems-with-$ UI — no
       "Buy Gems" storefront screen in this pass, per proposal.md's
       Non-Goals
+      (Confirmed via a repo-wide search for $/USD/IAP/payment/
+      checkout-related strings — none found in any of this session's
+      changes.)
 
 ## Code Reviewer
 - [ ] 3.1 Verify every gems spend actually checks balance before

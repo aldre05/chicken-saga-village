@@ -26,11 +26,18 @@
       (N/A — developer explicitly chose cost-increase-only.)
 
 ## Frontend Engineer
-- [ ] 2.1 Verify updated costs render correctly in the Workbench
+- [x] 2.1 Verify updated costs render correctly in the Workbench
       panel (reuses existing cost-display code, shouldn't need new
       UI unless a new use-case was added elsewhere)
-- [ ] 2.2 If a new use-case touches another panel (Town Hall, Quest
+      (Confirmed: all 13 recipes' cost ids are covered by
+      `RESOURCE_CONFIG` or `ITEM_CONFIG` — no crash risk, same
+      generic `formatCostHTML`/`RECIPES`-loop rendering already
+      proven working for every prior recipe addition this project.
+      No code changes needed.)
+- [x] 2.2 If a new use-case touches another panel (Town Hall, Quest
       Board), update that panel's display accordingly
+      (N/A — developer explicitly chose cost-increase-only, no new
+      use-case, per Backend's task 1.2 confirmation.)
 
 ## Code Reviewer
 - [ ] 3.1 Verify new costs don't make any recipe permanently

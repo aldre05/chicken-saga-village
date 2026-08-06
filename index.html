@@ -16,6 +16,8 @@
   <div id="resourceHud" class="hud"></div>
   <div class="header-row">
     <div id="workerHud" class="hud-chip worker-hud-chip"></div>
+    <div id="gemsHud" class="hud-chip gems-hud-chip"></div>
+    <button id="exchangeGemsBtn" class="exchange-gems-btn">💎 Exchange</button>
     <button id="autoClaimBtn" class="auto-claim-btn">⚡ Auto-Claim All</button>
   </div>
 </header>
@@ -48,6 +50,10 @@
     <div id="heroPanel" class="hero-panel hidden">
       <div class="hero-panel-title">🛡️ Barracks</div>
       <div class="hero-panel-recruit-pointer">Recruit heroes at the Lucky Wheel 🎡</div>
+      <div class="hero-panel-gem-roll-row">
+        <button id="buyHeroRollBtn" class="buy-gems-btn">Buy Hero Roll</button>
+        <span id="buyHeroRollCost" class="buy-gems-cost"></span>
+      </div>
       <div id="heroRosterList" class="hero-roster-list"></div>
     </div>
     <div id="dungeonPanel" class="dungeon-panel hidden">
@@ -59,6 +65,8 @@
         <button id="sendHeroBtn" class="send-hero-btn" disabled>Send</button>
         <span id="dungeonEntryCost" class="dungeon-entry-cost"></span>
         <span id="dungeonKeyCount" class="dungeon-key-count"></span>
+        <button id="buyKeyBtn" class="buy-gems-btn">Buy Key</button>
+        <span id="buyKeyCost" class="buy-gems-cost"></span>
       </div>
       <div id="dungeonSendReason" class="dungeon-send-reason hidden"></div>
     </div>
@@ -91,6 +99,22 @@
     <div id="wheelResultText" class="wheel-result-text"></div>
     <div id="wheelTicketInfo" class="wheel-ticket-info"></div>
     <button id="wheelSpinBtn" class="wheel-spin-btn">SPIN</button>
+  </div>
+</div>
+
+<div id="gemsExchangeModal" class="gems-exchange-modal hidden">
+  <div class="gems-exchange-modal-content">
+    <button id="gemsExchangeCloseBtn" class="gems-exchange-close-btn">✕</button>
+    <h2 class="gems-exchange-modal-title">💎 Exchange Gems</h2>
+    <div id="gemsExchangeBalance" class="gems-exchange-balance"></div>
+    <div class="gems-exchange-list">
+      <button class="gems-exchange-row" data-resource="egg">🥚 Egg <span class="gems-exchange-row-cost"></span></button>
+      <button class="gems-exchange-row" data-resource="feathers">🐓 Feathers <span class="gems-exchange-row-cost"></span></button>
+      <button class="gems-exchange-row" data-resource="wood">🌲 Wood <span class="gems-exchange-row-cost"></span></button>
+      <button class="gems-exchange-row" data-resource="rice">🌾 Rice <span class="gems-exchange-row-cost"></span></button>
+      <button class="gems-exchange-row" data-resource="stone">🗿 Stone <span class="gems-exchange-row-cost"></span></button>
+      <button class="gems-exchange-row" data-resource="ore">⛏️ Ore <span class="gems-exchange-row-cost"></span></button>
+    </div>
   </div>
 </div>
 

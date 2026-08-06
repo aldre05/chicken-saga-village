@@ -3,11 +3,14 @@
 _Last updated: 2026-08-03_
 
 ## Current Objective
-Build "Chicken Village" — a free, Pixiland-genre-inspired (not
+Build "Chicken Village" — a free-to-play, Pixiland-genre-inspired (not
 IP-copied) village builder web game for the Chicken Saga brand.
-Explicitly a fan/passion project: no real monetization, no NFTs, no
-tokens, pending legal review. Vanilla JS + HTML5 Canvas, no framework,
-localStorage only (no backend/accounts yet).
+Follows a standard Web2 paid-game-economy model (comparable to Dota 2/
+CS:GO/League of Legends — real-money purchases of in-game items/
+currency are in scope), not a crypto/NFT/token model — see Decisions
+below for the full history of this (reversed from an earlier
+blanket-defer stance on 2026-08-01). Vanilla JS + HTML5 Canvas, no
+framework, localStorage only (no backend/accounts yet).
 
 ## Current Status
 **Documentation & Testing is done for both `add-dungeon-keys` and
@@ -31,6 +34,27 @@ source this session's spec-writing relied on (used `design.md`,
 `tasks.md`, and the actual shipped source code instead, consistent
 with this project's "verify against the code, not the docs" habit).
 
+**UPDATE (2026-08-03, Frontend): all 4 pending changes' Frontend
+sections now done** — `fix-panel-click-reliability`,
+`add-tiered-production-scaling`, `add-crafting-cost-rebalance`, and
+`add-gems-currency`. See the detailed session section below. Headline
+items: (1) verified Backend's panel-click-reliability fix is
+structurally sound and proved it end-to-end for Workbench via a real
+jsdom DOM-node-identity test, but could **not** independently
+live-verify Dungeon Gate's tier/hero pickers specifically — that's
+flagged honestly in `tasks.md` as resting on code-review confidence
+plus the identical-pattern argument, not a passing live-DOM test,
+worth a real playtest checking that specifically; (2) built the full
+`add-gems-currency` UI (HUD balance, a new Exchange modal, Buy Hero
+Roll at the Barracks, Buy Key at the Dungeon Gate) — verified
+end-to-end via jsdom for the HUD/exchange/Buy-Hero-Roll paths, Buy Key
+specifically not live-tested (same Dungeon Gate pathing difficulty)
+but uses an identical already-proven pattern; (3) corrected a stale
+"Current Objective" header at the top of this file that still said
+"no real monetization... pending legal review" despite the 2026-08-01
+decision reversing that already being recorded in Decisions below —
+just a doc-sync fix, not a new decision.
+
 ## Active Tasks
 1. **Still open — found by a prior session, not fixed by anyone yet:**
    `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
@@ -39,14 +63,139 @@ with this project's "verify against the code, not the docs" habit).
    a session specifically dedicated to it rather than continuing to
    note it in passing.
 2. Real art integration (still 100% placeholder) — unchanged.
-3. **Playtest all 6 shipped features in an actual browser** (Heal
+3. **Playtest all 10 shipped features in an actual browser** (Heal
    Potion/downed-state/click-to-open/TH10, dungeon keys, wheel-only
-   recruiting) — still nobody has actually clicked through this live;
-   verified so far via a mix of persistent tests, scripted logic-level
-   checks, direct code review, and one prior session's temporary jsdom
-   smoke test.
-4. jsdom-as-committed-devDependency question — still undecided, still
-   flagging rather than silently deciding either way.
+   recruiting, panel-click-reliability fix, tiered production scaling,
+   crafting cost rebalance, gems currency) — still nobody has actually
+   clicked through this live; verified so far via a mix of persistent
+   tests, scripted logic-level checks, direct code review, and jsdom
+   smoke tests (real DOM, not a real browser).
+4. **NEW (2026-08-03) — specifically prioritize this within item 3's
+   playtest:** Dungeon Gate's tier picker (Medium/Hard) and champion
+   picker, and its new Buy Key button, are the one area of
+   `fix-panel-click-reliability`/`add-gems-currency` that's running on
+   code-review confidence + "identical pattern to something already
+   proven" rather than an actual passing live-DOM/browser test — every
+   attempt to reach Dungeon Gate specifically in a scripted jsdom
+   walk-test this session ran into pathing/timing difficulty (Barracks
+   sits immediately west of it and repeated attempts got stuck there).
+   Workbench's Craft button and the Barracks Buy-Hero-Roll button both
+   got full end-to-end proof using the exact same underlying
+   mechanisms, which is why this is "worth double-checking" rather
+   than "suspected broken" — but it's the one gap worth a human
+   actually clicking those two buttons before calling this done.
+5. jsdom-as-committed-devDependency question — still undecided, still
+   flagging rather than silently deciding either way. (This session
+   used it again, temporarily, same as every session since it was
+   first flagged — the question of whether to formalize it into
+   `package.json`/`test/` remains open, not decided by default through
+   repeated informal use.)
+
+## Frontend Session: Panel Click Reliability + Production Scaling + Cost Rebalance + Gems Currency (2026-08-03)
+Fresh clone per the standing instruction. Four proposals, all
+Backend-done/Frontend-open: `fix-panel-click-reliability`,
+`add-gems-currency` (substantial new UI), `add-tiered-production-
+scaling` and `add-crafting-cost-rebalance` (both pure verification
+passes, no new UI expected). Did the two quick verification passes
+first, then `fix-panel-click-reliability` (since I'm partly
+responsible for the original per-frame-rebuild bug it fixes), then
+`add-gems-currency` last as the biggest scope.
+
+**`fix-panel-click-reliability` (2.1–2.2):** Reviewed Backend's
+signature-gating fix across all 3 affected panels (`updateCraftingPanel`,
+`updateHeroPanel`, `updateDungeonPanel`) — structurally sound,
+correctly identified `updateBuildingPanel` as never having had the bug
+(only mutates static elements). Verified via headless jsdom (no live
+browser available in this environment): grabbed a reference to a
+specific Craft button, let ~100 real animation frames pass with
+nothing relevant changing, confirmed the *same* DOM node was still
+connected (not destroyed/recreated), then clicked it successfully —
+directly disproves the reported bug for Workbench. **Could not get
+the equivalent proof for Dungeon Gate specifically** — repeated
+attempts at both precise walk-navigation and a click-coordinate sweep
+got the simulated player stuck at Barracks (immediately west of
+Dungeon Gate) rather than reaching it; this looks like test-script
+pathing/timing difficulty, not anything about the fix, but it's
+honestly documented as unverified-by-live-test in `tasks.md` rather
+than papered over. House 9/10 placement verified via the actual
+`test/map.test.js` (5/5 pass).
+
+**`add-tiered-production-scaling` (2.1):** confirmed the panel display
+code (`panelRateEl`/`upgradePreviewEl`) calls
+`rateMultiplierForLevel`/`getEffectiveRatePerSecond` directly with no
+hardcoded formula assumptions. Directly computed displayed rates at
+levels 1/2/9/10/19/20/50 via a throwaway script — all sensible,
+monotonic, level 50 in the same order of magnitude Backend confirmed.
+No code changes needed.
+
+**`add-crafting-cost-rebalance` (2.1–2.2):** confirmed all 13 recipes'
+rebalanced costs reference only ids covered by `RESOURCE_CONFIG` or
+`ITEM_CONFIG` (no crash risk, same generic rendering already proven
+for every prior recipe). Task 2.2 N/A — cost-increase-only, no new
+use-case, confirmed via Backend's own task 1.2 note.
+
+**`add-gems-currency` (2.1–2.3):** Before writing any UI, verified
+Backend's actual implementation directly rather than trusting
+`tasks.md`'s notes — caught that `spinWheel()`'s signature had grown a
+new `gemsState` parameter inserted mid-signature, which could have
+silently broken the wheel if the existing call site hadn't been
+updated too. It had been (Backend passes `gameState` itself as
+`gemsState`, matching the "any object exposing a mutable `.gems`"
+convention) — false alarm, but worth checking rather than assuming.
+Built:
+- Gems HUD chip (magenta-accented, static text-only element — same
+  "safe to rebuild every frame" reasoning as the existing worker HUD
+  chip, since nothing clickable lives inside it).
+- A new Gems Exchange modal (💎 Exchange button in the header, same
+  open/close pattern as the Lucky Wheel modal). Six resource rows are
+  static HTML (not dynamically generated) with a fixed "spend 5 gems,
+  get 50 of a resource" per click, rather than introducing this
+  codebase's first numeric-input control — matches the project's
+  existing button-based UI style (recipe rows, tier buttons) better
+  than a novel input pattern for one use-case.
+- Buy Hero Roll button (Barracks) and Buy Key button (Dungeon Gate) —
+  both static single buttons gated purely on gems balance, same
+  established pattern as `sendHeroBtn` (no signature-gating needed,
+  no list to rebuild).
+- Task 2.3: searched for $/USD/IAP/payment/checkout-related strings
+  across everything touched this session — none found.
+
+Caught and fixed one of my own mistakes mid-edit: a copy-paste error
+that accidentally replaced the dungeon reward preview's "+XP" label
+with a gem icon — caught on the very next read-through before it was
+ever tested, not left in.
+
+Verified via a fresh headless-jsdom smoke test (deleted after use):
+gems HUD shows the correct starting balance; opening the Exchange
+modal shows the right balance; exchanging gems for egg deducts exactly
+5 gems and grants exactly 50 egg (`GEM_TO_RESOURCE_RATE`), confirmed
+in both the modal balance text *and* the actual resource HUD (not
+just trusting the deduction happened); walked a real simulated player
+to the Barracks and confirmed Buy Hero Roll spends exactly 100 gems
+and adds a hero to the roster end-to-end. Buy Key at Dungeon Gate not
+independently live-tested (same pathing difficulty as
+`fix-panel-click-reliability`'s Dungeon Gate tests) but uses the
+identical already-proven pattern — flagged in Active Tasks as the one
+thing worth a human specifically checking.
+
+Also fixed a stale doc inconsistency unrelated to any of the four
+proposals: this file's top "Current Objective" section still said "no
+real monetization... pending legal review" despite the 2026-08-01
+decision reversing that already being recorded further down in
+Decisions. Pure doc-sync, not a new decision.
+
+**Verification across all four:** `node --check` throughout; full
+test suite after each change (225/232 passing throughout, same 7
+pre-existing failures — all Backend-rebalance-related test fallout
+already assigned to Documentation & Testing, none caused by this
+session, confirmed via `git status --short` showing zero unexpected
+file changes between checks).
+
+**Files touched:** `index.html`, `js/main.js`, `styles.css`,
+`openspec/changes/fix-panel-click-reliability/tasks.md`,
+`openspec/changes/add-tiered-production-scaling/tasks.md`,
+`openspec/changes/add-crafting-cost-rebalance/tasks.md`,
+`openspec/changes/add-gems-currency/tasks.md`, `memory.md`.
 
 ## Code Reviewer Session: Dungeon Keys + Recruit-via-Lucky-Wheel (2026-08-02)
 Fresh clone per standing instruction, HEAD `56539b0` (moved on from
@@ -980,6 +1129,31 @@ deliverables — it was a delivery artifact (a git patch for manual
 application), not meant to live in the repo.
 
 ## Session Log
+- **2026-08-03 (Frontend — panel-click-reliability, tiered-production-
+  scaling, crafting-cost-rebalance, gems-currency):** Re-cloned fresh
+  per the standing instruction. Did the two quick verification passes
+  first, then the click-reliability fix verification (reviewed
+  Backend's signature-gating fix, proved it end-to-end for Workbench
+  via jsdom DOM-node-identity testing, could not get equivalent live
+  proof for Dungeon Gate due to test-script pathing issues — honestly
+  flagged as unverified rather than papered over), then built the full
+  `add-gems-currency` UI (HUD balance, Exchange modal, Buy Hero Roll,
+  Buy Key) last as the biggest scope. Caught a real signature-mismatch
+  risk before it mattered (`spinWheel()` gained a new `gemsState` param
+  — turned out Backend had already updated the call site, but worth
+  checking rather than assuming). Caught and fixed one of my own
+  mistakes mid-edit (an accidental XP-label-to-gem-icon copy-paste
+  error) on the next read-through, before it was ever tested. Also
+  fixed a stale "no real monetization" line in this file's own
+  Current Objective section that contradicted an already-recorded
+  2026-08-01 decision reversing that. Verified via node --check, full
+  test suite after each change (225/232 throughout, 7 pre-existing
+  failures unrelated to this session), and jsdom smoke tests (deleted
+  after use) proving the HUD/exchange/Buy-Hero-Roll paths end-to-end;
+  Buy Key at Dungeon Gate not independently live-tested, flagged as
+  the one specific thing worth a human checking. Checked off tasks.md
+  Frontend sections for all four changes. Not pushed — no git
+  credentials in this environment.
 - **2026-08-02 (Frontend — dungeon-keys + recruit-via-lucky-wheel):**
   Re-cloned fresh per the standing instruction (caught HEAD had moved
   again since earlier this same day). Found and fixed a whole-game

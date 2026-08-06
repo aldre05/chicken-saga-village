@@ -83,6 +83,12 @@ body {
   display: inline-flex;
   margin-top: 6px;
 }
+.gems-hud-chip {
+  display: inline-flex;
+  margin-top: 6px;
+  color: #c94fae;
+  border-color: #c94fae;
+}
 
 .header-row {
   display: flex;
@@ -105,6 +111,20 @@ body {
 }
 .auto-claim-btn:hover { background: var(--egg-gold-bright); }
 .auto-claim-btn:active { transform: translateY(1px); }
+
+.exchange-gems-btn {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: #c94fae;
+  color: var(--parchment);
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+.exchange-gems-btn:hover { background: #dd6bc2; }
+.exchange-gems-btn:active { transform: translateY(1px); }
 
 .building-panel {
   position: absolute;
@@ -792,4 +812,109 @@ body {
   gap: 10px;
   padding-top: 8px;
   border-top: 1px solid var(--divider);
+}
+
+/* ---------- Gems Exchange modal (add-gems-currency) — same shell/
+   pattern as the Lucky Wheel modal, magenta accent to distinguish
+   this as premium-currency UI at a glance. ---------- */
+.gems-exchange-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 6, 4, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+.gems-exchange-modal-content {
+  position: relative;
+  background: var(--panel-wood);
+  border: 3px solid #c94fae;
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  max-width: 90vw;
+  min-width: 280px;
+}
+.gems-exchange-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+  background: none;
+  border: none;
+  color: var(--parchment-dim);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.gems-exchange-close-btn:hover { color: var(--egg-gold-bright); }
+.gems-exchange-modal-title {
+  font-family: var(--font-display);
+  color: #dd6bc2;
+  margin: 0 0 4px 0;
+  text-align: center;
+}
+.gems-exchange-balance {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--parchment-dim);
+  text-align: center;
+  margin-bottom: 6px;
+}
+.gems-exchange-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.gems-exchange-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  color: var(--parchment);
+  background: var(--panel-wood-light);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.gems-exchange-row:hover:not(:disabled) { border-color: #c94fae; }
+.gems-exchange-row:disabled { opacity: 0.4; cursor: not-allowed; }
+.gems-exchange-row-cost {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
+}
+
+/* ---------- Buy-with-gems buttons (Barracks/Dungeon Gate) ---------- */
+.hero-panel-gem-roll-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
+}
+.buy-gems-btn {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: #c94fae;
+  color: var(--parchment);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.buy-gems-btn:hover:not(:disabled) { background: #dd6bc2; }
+.buy-gems-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.buy-gems-cost {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--parchment-dim);
 }

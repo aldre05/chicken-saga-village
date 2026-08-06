@@ -6,7 +6,7 @@ import { findNearestInteractable, distanceToRect, createDialogueState, closeDial
 import { renderFrame } from './render.js';
 import { loadGameState, saveGameState } from './gameState.js';
 import { HANDLERS, BUILDING_RESOURCE } from './interactionHandlers.js';
-import { RESOURCE_CONFIG, isResourceUnlocked, collectFromBuilding, getEffectiveRatePerSecond, getBuildingStored, canAfford } from './resources.js';
+import { RESOURCE_CONFIG, isResourceUnlocked, collectFromBuilding, getEffectiveRatePerSecond, getBuildingStored, canAfford, GEM_TO_RESOURCE_RATE, canExchangeGemsForResource, exchangeGemsForResource } from './resources.js';
 import { assignWorker, unassignWorker, getIdleWorkers } from './workers.js';
 import { isBuildingUnlocked, UNLOCK_CONFIG, unlockBuilding } from './buildingUnlocks.js';
 import { applyUpkeep } from './upkeep.js';
@@ -22,11 +22,12 @@ import {
 import {
   effectivePower, isHeroBusy, isHeroIdle, getHeroById,
   EQUIPMENT_SLOTS, EQUIPMENT_ITEMS, canEquipItem, equipHero, unequipHero,
-  isDowned, getMaxHp, getHealCost, canHealHero, healHero, useHealPotion, canUseHealPotion, HEAL_POTION_ITEM_ID
+  isDowned, getMaxHp, getHealCost, canHealHero, healHero, useHealPotion, canUseHealPotion, HEAL_POTION_ITEM_ID,
+  HERO_ROLL_GEM_COST, canBuyHeroRollWithGems, buyHeroRollWithGems
 } from './heroes.js';
 import {
   DUNGEON_TIERS, DUNGEON_TIER_IDS, getDungeonTier, canSendHeroToDungeon, sendHeroToDungeon, resolveReadyDungeons,
-  DUNGEON_KEY_ITEM_ID
+  DUNGEON_KEY_ITEM_ID, DUNGEON_KEY_GEM_COST, canBuyDungeonKeyWithGems, buyDungeonKeyWithGems
 } from './dungeons.js';
 
 const canvas = document.getElementById('gameCanvas');
@@ -57,6 +58,8 @@ const craftingRecipeListEl = document.getElementById('craftingRecipeList');
 
 const heroPanelEl = document.getElementById('heroPanel');
 const heroRosterListEl = document.getElementById('heroRosterList');
+const buyHeroRollBtn = document.getElementById('buyHeroRollBtn');
+const buyHeroRollCostEl = document.getElementById('buyHeroRollCost');
 
 const dungeonPanelEl = document.getElementById('dungeonPanel');
 const dungeonTierListEl = document.getElementById('dungeonTierList');
@@ -66,6 +69,15 @@ const sendHeroBtn = document.getElementById('sendHeroBtn');
 const dungeonEntryCostEl = document.getElementById('dungeonEntryCost');
 const dungeonKeyCountEl = document.getElementById('dungeonKeyCount');
 const dungeonSendReasonEl = document.getElementById('dungeonSendReason');
+const buyKeyBtn = document.getElementById('buyKeyBtn');
+const buyKeyCostEl = document.getElementById('buyKeyCost');
+
+const gemsHudEl = document.getElementById('gemsHud');
+const exchangeGemsBtn = document.getElementById('exchangeGemsBtn');
+const gemsExchangeModalEl = document.getElementById('gemsExchangeModal');
+const gemsExchangeCloseBtn = document.getElementById('gemsExchangeCloseBtn');
+const gemsExchangeBalanceEl = document.getElementById('gemsExchangeBalance');
+const gemsExchangeRows = Array.from(document.querySelectorAll('.gems-exchange-row'));
 
 // Static refs to the Barracks/Dungeon Gate world objects, used as the
 // anchor point for floating popups (recruit results, mission results).
@@ -377,6 +389,15 @@ function updateResourceHud() {
     hudEl.appendChild(chip);
   }
   updateWorkerHud();
+  updateGemsHud();
+}
+
+// Gems is a separate static element (not part of the RESOURCE_CONFIG
+// loop above, since gems isn't a raw resource) — just text content,
+// no buttons inside it, so no click-reliability concern rebuilding
+// it every frame (same reasoning as updateWorkerHud()).
+function updateGemsHud() {
+  gemsHudEl.innerHTML = `<span class="hud-icon">💎</span><span>${gameState.gems}</span>`;
 }
 
 function updateWorkerHud() {
@@ -493,6 +514,58 @@ luckyWheelCloseBtn.addEventListener('click', closeWheelModal);
 luckyWheelModalEl.addEventListener('click', (e) => {
   if (e.target === luckyWheelModalEl) closeWheelModal();
 });
+
+// Gems Exchange modal — same open/close pattern as the Lucky Wheel
+// modal above. Fixed gem amount per click (GEMS_PER_EXCHANGE) rather
+// than a numeric input: GEM_TO_RESOURCE_RATE is a flat rate, so a
+// repeatable "spend 5, get 50" button matches this project's existing
+// minimal-UI style (recipe rows, tier buttons) better than
+// introducing this codebase's first numeric-input control for a
+// single use-case.
+const GEMS_PER_EXCHANGE = 5;
+
+exchangeGemsBtn.addEventListener('click', () => {
+  updateGemsExchangeModal();
+  gemsExchangeModalEl.classList.remove('hidden');
+});
+gemsExchangeCloseBtn.addEventListener('click', closeGemsExchangeModal);
+gemsExchangeModalEl.addEventListener('click', (e) => {
+  if (e.target === gemsExchangeModalEl) closeGemsExchangeModal();
+});
+
+function closeGemsExchangeModal() {
+  gemsExchangeModalEl.classList.add('hidden');
+}
+
+// The 6 resource rows are a fixed, never-changing set (declared once
+// in index.html, not dynamically generated) — same reasoning as
+// sendHeroBtn/dungeonEntryCostEl: a fixed number of static elements
+// never needs the signature-gating pattern used for the tier/hero
+// pickers, since there's no list to rebuild, just text/disabled state
+// to update on an unchanging set of buttons.
+for (const row of gemsExchangeRows) {
+  const resourceId = row.dataset.resource;
+  row.addEventListener('click', () => {
+    const ok = exchangeGemsForResource(gameState, gameState.resources, resourceId, GEMS_PER_EXCHANGE);
+    if (ok) {
+      spawnFloatingPopup(`+${GEMS_PER_EXCHANGE * GEM_TO_RESOURCE_RATE} ${RESOURCE_CONFIG[resourceId].icon}`, player.x + PLAYER_SPRITE_SIZE / 2, player.y);
+    }
+    updateResourceHud();
+    updateGemsExchangeModal();
+  });
+}
+
+function updateGemsExchangeModal() {
+  gemsExchangeBalanceEl.textContent = `You have ${gameState.gems} 💎`;
+  for (const row of gemsExchangeRows) {
+    const resourceId = row.dataset.resource;
+    const cfg = RESOURCE_CONFIG[resourceId];
+    const canExchange = canExchangeGemsForResource(gameState, GEMS_PER_EXCHANGE);
+    row.disabled = !canExchange;
+    row.querySelector('.gems-exchange-row-cost').innerHTML =
+      `<span class="${canExchange ? '' : 'cost-insufficient'}">${GEMS_PER_EXCHANGE}💎</span> → ${GEMS_PER_EXCHANGE * GEM_TO_RESOURCE_RATE}${cfg.icon}`;
+  }
+}
 
 function openWheelModal() {
   wheelResultTextEl.textContent = '';
@@ -858,6 +931,12 @@ function updateHeroPanel(target) {
 
   const now = Date.now();
 
+  // Buy Hero Roll with gems — static button, always enabled/disabled
+  // purely based on gems balance, no list to rebuild, so no
+  // signature-gating needed (same reasoning as sendHeroBtn).
+  buyHeroRollCostEl.innerHTML = `<span class="${gameState.gems < HERO_ROLL_GEM_COST ? 'cost-insufficient' : ''}">${HERO_ROLL_GEM_COST}💎</span>`;
+  buyHeroRollBtn.disabled = !canBuyHeroRollWithGems(gameState);
+
   // Signature captures every piece of state that could visibly change
   // a roster row or the expanded manage panel — see updateCraftingPanel's
   // comment above for the full root-cause/fix explanation (same
@@ -991,6 +1070,8 @@ function updateDungeonPanel(target) {
   const keyCount = gameState.inventory[DUNGEON_KEY_ITEM_ID] || 0;
   dungeonKeyCountEl.innerHTML = `<span class="${keyCount < 1 ? 'cost-insufficient' : ''}">🗝️${keyCount}</span>`;
   dungeonRewardPreviewEl.innerHTML = `Reward: ${formatCostHTML(selectedTier.fullReward)} <span class="dungeon-reward-xp">+${selectedTier.fullXp}XP</span>`;
+  buyKeyCostEl.innerHTML = `<span class="${gameState.gems < DUNGEON_KEY_GEM_COST ? 'cost-insufficient' : ''}">${DUNGEON_KEY_GEM_COST}💎</span>`;
+  buyKeyBtn.disabled = !canBuyDungeonKeyWithGems(gameState);
 
   // --- Idle hero picker --- (busy heroes can't be sent, so they're
   // not offered here — the roster panel at the Barracks is where
@@ -1076,6 +1157,26 @@ function updateDungeonPanel(target) {
 
   dungeonPanelEl.classList.remove('hidden');
 }
+
+buyHeroRollBtn.addEventListener('click', () => {
+  const hero = buyHeroRollWithGems(gameState, gameState.heroes);
+  if (hero) {
+    const rarityLabel = hero.rarity.charAt(0).toUpperCase() + hero.rarity.slice(1);
+    spawnFloatingPopup(`Bought a roll! ${rarityLabel} ${hero.name} joined the roster! 💎`, barracksObj.x + barracksObj.width / 2, barracksObj.y);
+  } else {
+    spawnFloatingPopup("Not enough gems", barracksObj.x + barracksObj.width / 2, barracksObj.y);
+  }
+  updateResourceHud();
+});
+
+buyKeyBtn.addEventListener('click', () => {
+  const ok = buyDungeonKeyWithGems(gameState, gameState.inventory);
+  spawnFloatingPopup(
+    ok ? 'Bought a Dungeon Key! 🗝️' : 'Not enough gems',
+    dungeonGateObj.x + dungeonGateObj.width / 2, dungeonGateObj.y
+  );
+  updateResourceHud();
+});
 
 sendHeroBtn.addEventListener('click', () => {
   const now = Date.now();

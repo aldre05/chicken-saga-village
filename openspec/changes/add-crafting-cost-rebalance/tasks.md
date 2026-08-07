@@ -40,12 +40,35 @@
       use-case, per Backend's task 1.2 confirmation.)
 
 ## Code Reviewer
-- [ ] 3.1 Verify new costs don't make any recipe permanently
+- [x] 3.1 Verify new costs don't make any recipe permanently
       unaffordable at low Town Hall/building levels (a new player
       should still be able to reach every recipe eventually without a
       dead end)
-- [ ] 3.2 Standard verification: syntax, full import-graph trace,
+      (2026-08-05: scripted — every recipe's cost, resource-by-resource,
+      checked against `RESOURCE_CONFIG`'s base caps (all costs land
+      well under even the un-scaled base cap, before any level-scaling
+      even applies); `boots`' item-based `plank` cost confirmed to
+      reference a real, craftable recipe, not a dead reference.
+      Simulated crafting ALL 13 recipes end-to-end from a
+      fully-resourced state, in dependency order (raw-resource recipes
+      first, then `boots` after enough `plank` exists) — every single
+      one actually succeeds, not just cost-inspected. Confirmed every
+      raw resource referenced across all 13 recipes unlocks by TH10 at
+      the latest (max is TH5 for rice/ore), so nothing is gated behind
+      an unreachable Town Hall level either. No recipe is a dead end
+      at any point in progression.)
+- [x] 3.2 Standard verification: syntax, full import-graph trace,
       `node --test`
+      (2026-08-05: `node --check` on all 22 `js/*.js` files — clean.
+      Import-graph trace via `import()` on every file individually —
+      no stale-import regressions. Full suite: 225/232 passing. The 7
+      failures split across `buildingLevels.js` (1, from
+      `add-tiered-production-scaling`), `crafting.js` (4, this
+      proposal's own cost/shape changes), and `luckyWheel.js` (2, from
+      `add-crafting-cost-rebalance`/`add-gems-currency`'s REWARD_TABLE
+      changes) — all traced to specific, already-known-and-assigned
+      causes (Documentation & Testing's 4.1 for each proposal), none
+      unexplained or newly introduced by this review.)
 
 ## Documentation & Testing
 - [ ] 4.1 Update `test/crafting.test.js` for new cost values

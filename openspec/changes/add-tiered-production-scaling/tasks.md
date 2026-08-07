@@ -48,14 +48,47 @@
       No code changes needed.)
 
 ## Code Reviewer
-- [ ] 3.1 Verify tier boundaries are correct (level 9→10 uses which
+- [x] 3.1 Verify tier boundaries are correct (level 9→10 uses which
       percentage, level 19→20 uses which — confirm against design.md's
       exact tier definition, off-by-one errors are easy here)
-- [ ] 3.2 Verify no other code assumes the old additive formula's
+      (2026-08-05: scripted — manually computed the expected multiplier
+      at levels 9/10/19/20 from first principles [levels 2-9 = 8
+      compounding steps at 10%, level 10 is the FIRST level at 15%,
+      etc.] and confirmed the actual `rateMultiplierForLevel` output
+      matches exactly, catching the specific off-by-one design.md's
+      own task warns about [does level 10 use 10% or 15%? — confirmed
+      15%, correctly the new tier's own rate applies starting AT the
+      boundary level, not one level late]. Cross-checked all 4 stated
+      magnitude targets [level 9 ~64/min, 19 ~260/min, 20 ~312/min, 50
+      ~74,000/min] against a 30/min base — all within rounding
+      tolerance of design.md's numbers. Also confirmed strict
+      monotonicity level 1→50 [no dips] and that level 1 is exactly
+      1x [no growth applied before any upgrade].)
+- [x] 3.2 Verify no other code assumes the old additive formula's
       shape (e.g. anything that hardcoded or estimated rate values
       based on the old curve)
-- [ ] 3.3 Standard verification: syntax, full import-graph trace,
+      (2026-08-05: grepped for the old formula's tier percentages
+      [0.15/0.20/0.25/0.30] and related terms [`bonusPerLevel`,
+      `levelsInTier`] across all `js/*.js` files — the only 2 matches
+      are both unrelated constants [Heal Potion's restore fraction,
+      Ore's base collection rate], not leftover assumptions about the
+      old production-rate formula. Also independently reconfirmed
+      design.md's own cap-non-binding claim [caps compound via a
+      separate, steeper `CAP_GROWTH_RATE=1.3` formula]: computed the
+      actual level-50 cap [~1.15e8] against an hour of level-50
+      production under the NEW curve [~4.45e6] — caps stay well clear,
+      confirming the rate-curve change didn't accidentally make caps a
+      binding constraint either.)
+- [x] 3.3 Standard verification: syntax, full import-graph trace,
       `node --test`
+      (2026-08-05: same standard sweep as the other 3 proposals this
+      session — see `add-crafting-cost-rebalance`'s 3.2 note for the
+      full breakdown; identical results [225/232, same 7 traced,
+      already-assigned failures]. This proposal's own contribution:
+      `buildingLevels.js`'s `rateMultiplierForLevel is 1 at level 1
+      and continuous across tier boundaries` test still asserts the
+      OLD additive formula's output — expected fallout, Documentation
+      & Testing's task 4.1 to rewrite, not add-alongside.)
 
 ## Documentation & Testing
 - [ ] 4.1 Update `test/buildingLevels.test.js` for the new formula —

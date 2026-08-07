@@ -55,41 +55,157 @@ but uses an identical already-proven pattern; (3) corrected a stale
 decision reversing that already being recorded in Decisions below —
 just a doc-sync fix, not a new decision.
 
+**UPDATE (2026-08-05, Code Reviewer): all 4 pending changes' Code
+Reviewer sections now done** — `fix-panel-click-reliability`,
+`add-tiered-production-scaling`, `add-crafting-cost-rebalance`, and
+`add-gems-currency`. See the detailed session section below.
+Headline items: (1) confirmed `add-gems-currency` is genuinely scoped
+away from real-money purchasing — scanned every gems-touching file for
+payment-processor/IAP/webhook patterns, zero matches, and all 3 spend
+paths verified balance-safe at the exact cost boundary; (2) verified
+`add-tiered-production-scaling`'s compounding formula against
+design.md's exact numbers, including the specific level-10 tier-
+boundary off-by-one design.md itself warns about; (3) verified
+`add-crafting-cost-rebalance` has no dead-end recipe by actually
+crafting all 13 recipes end-to-end from a funded state, not just
+inspecting costs; (4) for `fix-panel-click-reliability`'s Dungeon Gate
+freshness scenario (item 4 in Active Tasks, flagged by the prior
+Frontend session), tried live jsdom verification again — single-
+direction, diagonal, AND multi-leg pathing, all failed the same way
+prior sessions' attempts did — and fell back to direct code review
+(confirmed both `updateCraftingPanel`/`updateDungeonPanel`'s click
+handlers explicitly re-invoke themselves synchronously after the
+state-mutating action, which is a stronger freshness guarantee than a
+single passing jsdom run would have been anyway, since it holds by
+construction rather than by observed timing). Full suite: 225/232
+throughout, all 7 traced to already-known causes, nothing new.
+
 ## Active Tasks
-1. **Still open — found by a prior session, not fixed by anyone yet:**
-   `applyUpkeep()` in `main.js`'s `loop(now)` still receives the
-   `requestAnimationFrame` timestamp instead of `Date.now()`. This is
-   now flagged across 4+ sessions without anyone picking it up — worth
-   a session specifically dedicated to it rather than continuing to
-   note it in passing.
-2. Real art integration (still 100% placeholder) — unchanged.
-3. **Playtest all 10 shipped features in an actual browser** (Heal
-   Potion/downed-state/click-to-open/TH10, dungeon keys, wheel-only
-   recruiting, panel-click-reliability fix, tiered production scaling,
-   crafting cost rebalance, gems currency) — still nobody has actually
-   clicked through this live; verified so far via a mix of persistent
-   tests, scripted logic-level checks, direct code review, and jsdom
-   smoke tests (real DOM, not a real browser).
-4. **NEW (2026-08-03) — specifically prioritize this within item 3's
-   playtest:** Dungeon Gate's tier picker (Medium/Hard) and champion
-   picker, and its new Buy Key button, are the one area of
-   `fix-panel-click-reliability`/`add-gems-currency` that's running on
-   code-review confidence + "identical pattern to something already
-   proven" rather than an actual passing live-DOM/browser test — every
-   attempt to reach Dungeon Gate specifically in a scripted jsdom
-   walk-test this session ran into pathing/timing difficulty (Barracks
-   sits immediately west of it and repeated attempts got stuck there).
-   Workbench's Craft button and the Barracks Buy-Hero-Roll button both
-   got full end-to-end proof using the exact same underlying
-   mechanisms, which is why this is "worth double-checking" rather
-   than "suspected broken" — but it's the one gap worth a human
-   actually clicking those two buttons before calling this done.
-5. jsdom-as-committed-devDependency question — still undecided, still
-   flagging rather than silently deciding either way. (This session
-   used it again, temporarily, same as every session since it was
-   first flagged — the question of whether to formalize it into
-   `package.json`/`test/` remains open, not decided by default through
-   repeated informal use.)
+1. Documentation & Testing passes for all 4 proposals reviewed this
+   session — this is now the actual next step: fix the 7 currently-
+   failing tests (old-formula/old-cost/old-reward-table assumptions
+   in `buildingLevels.test.js`/`crafting.test.js`/`luckyWheel.test.js`
+   — traced precisely in each proposal's own tasks.md 3.x notes),
+   update the relevant specs (`resource-production`,
+   `crafting-system`, `lucky-wheel`, `interaction-system`), and
+   archive all 4 `openspec/changes/` folders once done.
+2. **Still open — found by a prior session, not fixed by anyone yet,
+   now flagged across 5+ sessions:** `applyUpkeep()` in `main.js`'s
+   `loop(now)` still receives the `requestAnimationFrame` timestamp
+   instead of `Date.now()`. Worth a session specifically dedicated to
+   this rather than continuing to note it in passing.
+3. Real art integration (still 100% placeholder) — unchanged.
+4. **Playtest all 10 shipped features in an actual browser** — still
+   nobody has actually clicked through this live. In particular,
+   Dungeon Gate's tier/champion pickers and its Buy Key button remain
+   the one area resting on code-review confidence (now reinforced
+   twice, by both a Frontend and a Code Reviewer session
+   independently hitting and documenting the same jsdom pathing
+   limit) rather than a passing live-DOM test — worth specifically
+   prioritizing within this playtest.
+5. jsdom-as-committed-devDependency question — still undecided. This
+   session used it again, temporarily, hit the exact same Dungeon
+   Gate pathing wall a prior session already documented — if this
+   keeps recurring across sessions, it may be worth someone
+   deliberately fixing the pathing (e.g. a `warpPlayerTo()` test-only
+   debug hook) rather than re-attempting fresh navigation logic each
+   time. Flagging as a possible process improvement, not deciding it
+   unilaterally.
+
+## Code Reviewer Session: Panel Click Reliability + Production Scaling + Cost Rebalance + Gems Currency (2026-08-05)
+Fresh clone per standing instruction, HEAD `3cc8fed`.
+
+**`add-gems-currency` (the most scope-sensitive of the four):**
+confirmed via direct reading of proposal.md's Architecture Gap section
+that the real-money-purchase exclusion is a deliberate, well-reasoned
+boundary (no backend/accounts/payment processor exists to safely
+verify a real transaction against), not an oversight. Scanned every
+gems-touching file (`gameState.js`/`dungeons.js`/`heroes.js`/
+`resources.js`/`luckyWheel.js`/`main.js`) for stripe/IAP/webhook/
+checkout/payment-processor/Apple-Pay/Google-Play-Billing/$-amount/
+credit-card patterns — zero matches. Scripted verification of all 3
+gems-spend paths (`buyDungeonKeyWithGems`, `buyHeroRollWithGems`,
+`exchangeGemsForResource`) at the exact cost boundary, one below it,
+and zero: correct success/rejection at each point, nothing granted and
+no gems deducted on any rejected attempt. Also caught two things a
+narrower test might have missed: `exchangeGemsForResource` correctly
+rejects both an unknown resource id and a zero/negative gem amount
+(either would otherwise be a free-resources or balance-corruption
+exploit), and all 6 resource ids work through the exchange, not just
+one spot-checked.
+
+**`add-tiered-production-scaling`:** manually derived the expected
+multiplier at the exact tier-boundary levels (9/10/19/20) from first
+principles and confirmed the actual `rateMultiplierForLevel` output
+matches — specifically catching the off-by-one design.md's own task
+warns about (does level 10 use the OLD tier's rate or the NEW one?
+Confirmed the new 15% tier applies starting exactly at level 10, not
+one level late). Cross-checked all 4 of design.md's stated magnitude
+targets (up to ~74,000/min at level 50) against a computed 30/min
+base — within rounding tolerance throughout. Grepped for the old
+formula's tier percentages and related terms across the whole
+codebase; the only 2 hits were unrelated constants (Heal Potion's
+restore fraction, Ore's base rate), not leftover assumptions.
+Independently reconfirmed design.md's own cap-non-binding claim by
+computing both sides directly rather than trusting the stated ratio.
+
+**`add-crafting-cost-rebalance`:** rather than just inspecting each
+recipe's cost numbers, actually simulated crafting all 13 recipes
+end-to-end from a fully-resourced state, in dependency order (raw-
+resource recipes first, then item-dependent ones like Boots after
+enough Plank exists) — every single one genuinely succeeds. Confirmed
+no recipe cost exceeds even the un-scaled base resource caps (trivially
+satisfied, no risk of a cap-bound dead end), and that every raw
+resource referenced across all 13 recipes unlocks by TH10 at the
+latest, so nothing is permanently gated behind an unreachable Town
+Hall level either.
+
+**`fix-panel-click-reliability`:** confirmed `loop(now)`'s call
+pattern for `applyUpkeep`/`resolvePendingDungeons` is byte-for-byte
+unchanged by this fix — both still run unconditionally every frame,
+completely outside the panel-gating logic. For the freshness question
+(does the click-reliability fix accidentally reintroduce staleness?),
+attempted a live jsdom test — walk to Workbench, craft something,
+confirm the button's disabled state flips immediately; walk to Dungeon
+Gate, click a tier, confirm "selected" moves immediately. Hit the
+exact same Dungeon Gate pathing difficulty the prior Frontend session
+already documented (flagged in Active Tasks item 4 going into this
+session) — tried single-direction, diagonal, AND multi-leg direction-
+combo navigation this time, all failed the same way. Rather than keep
+re-attempting the same pathfinding problem a second session in a row,
+fell back to direct code review: read both `updateCraftingPanel`'s and
+`updateDungeonPanel`'s actual click-handler bodies and confirmed each
+explicitly re-invokes itself synchronously immediately after the
+state-mutating action (`craftSpecific()`/changing
+`selectedDungeonTierId`), which forces an immediate signature recheck
+against the NEW state — this is arguably a *stronger* guarantee than a
+single passing jsdom run would have given anyway, since it holds by
+construction (no frame where stale content could be visible, even
+momentarily) rather than by one observed instance of correct timing.
+Documented this reasoning directly in tasks.md rather than just noting
+"jsdom failed again."
+
+**Full verification, all 4 proposals, one shared standard sweep:**
+`node --check` on all 22 `js/*.js` files — clean. Import-graph trace
+via `import()` on every file individually — no stale-import
+regressions. Full suite: 225/232, all 7 failures traced to specific,
+already-known-and-assigned causes (1 in `buildingLevels.js` from the
+old additive-formula test, 4 in `crafting.js` from old cost
+assumptions, 2 in `luckyWheel.js` from the old REWARD_TABLE shape) —
+confirmed none are new or unexplained by checking the specific failing
+sub-test names against what each proposal's own design.md predicted
+would break. Also reran `test/map.test.js` independently (5/5 passing)
+to reconfirm the House 9/10 zero-overlap claim rather than just citing
+Frontend's own report of it.
+
+Files modified: `openspec/changes/add-crafting-cost-rebalance/tasks.md`,
+`openspec/changes/add-gems-currency/tasks.md`,
+`openspec/changes/add-tiered-production-scaling/tasks.md`,
+`openspec/changes/fix-panel-click-reliability/tasks.md`, `memory.md`.
+No source files needed changes — all 4 implementations were already
+correct. No test files added this session (verification was
+scripted/throwaway or jsdom, not committed) — Documentation &
+Testing's 4.x tasks across all 4 proposals is the actual next step.
 
 ## Frontend Session: Panel Click Reliability + Production Scaling + Cost Rebalance + Gems Currency (2026-08-03)
 Fresh clone per the standing instruction. Four proposals, all

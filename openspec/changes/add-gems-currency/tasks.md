@@ -66,15 +66,42 @@
       changes.)
 
 ## Code Reviewer
-- [ ] 3.1 Verify every gems spend actually checks balance before
+- [x] 3.1 Verify every gems spend actually checks balance before
       committing (no negative-gems bugs)
-- [ ] 3.2 Verify no code anywhere in this proposal's diff touches
+      (2026-08-05: scripted — all 3 spend paths (`buyDungeonKeyWithGems`,
+      `buyHeroRollWithGems`, `exchangeGemsForResource`) tested at the
+      exact cost boundary, one below it, and zero: correctly
+      succeed/reject at each point, gems and the granted thing
+      [key/hero/resource] both untouched on every rejected attempt —
+      no partial-spend, no negative balance possible. Also confirmed
+      `exchangeGemsForResource` rejects an unknown resource id and
+      rejects a zero/negative gem amount [both would otherwise be a
+      free-resources or balance-corruption exploit], and that all 6
+      resource ids work correctly through the exchange, not just one
+      spot-checked.)
+- [x] 3.2 Verify no code anywhere in this proposal's diff touches
       payment processing, external requests, or anything that could
       be mistaken for real-money purchase plumbing — flag immediately
       if found, this proposal is explicitly gems-as-virtual-currency
       only
-- [ ] 3.3 Standard verification: syntax, full import-graph trace,
+      (2026-08-05: scanned every gems-touching file
+      [`gameState.js`/`dungeons.js`/`heroes.js`/`resources.js`/
+      `luckyWheel.js`/`main.js`] for stripe/IAP/webhook/checkout/
+      payment-processor/Apple-Pay/Google-Play-Billing/$-amount/credit-
+      card patterns — zero matches. Confirmed by reading proposal.md's
+      own Architecture Gap section that this is a deliberate,
+      well-reasoned scope boundary [no backend/accounts/payment
+      processor exists to safely verify a real purchase against], not
+      an oversight — nothing in the actual diff crosses it.)
+- [x] 3.3 Standard verification: syntax, full import-graph trace,
       `node --test`
+      (2026-08-05: same standard sweep as the other 3 proposals this
+      session — see `add-crafting-cost-rebalance`'s 3.2 note for the
+      full breakdown; identical results [225/232, same 7 traced,
+      already-assigned failures]. This proposal's own contribution:
+      `luckyWheel.js`'s new `gems` REWARD_TABLE entry is part of why
+      the old "every REWARD_TABLE entry is a known resource" test
+      shape needed rewriting — Documentation & Testing's task 4.3.)
 
 ## Documentation & Testing
 - [ ] 4.1 `test/gameState.test.js`: gems save/load coverage

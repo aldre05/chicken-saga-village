@@ -97,16 +97,54 @@
       interactables, not eyeballed.)
 
 ## Code Reviewer
-- [ ] 3.1 Verify the fix doesn't reintroduce stale panel content
+- [x] 3.1 Verify the fix doesn't reintroduce stale panel content
       (e.g. craft button staying "affordable" after a purchase drops
       resources below cost, tier button staying "selected" after
       target changes) — the original per-frame rebuild was
       accidentally correct about *freshness*, only wrong about *click
       reliability*; the fix must preserve freshness
-- [ ] 3.2 Verify `resolvePendingDungeons()`/`applyUpkeep()` still run
+      (2026-08-05: verified primarily via direct code review, not
+      jsdom — attempted a targeted jsdom test [craft an item, confirm
+      the button's disabled state flips immediately; click a tier,
+      confirm "selected" moves immediately] but hit the same
+      simulated-player pathing difficulty prior sessions documented
+      getting to Workbench/Dungeon Gate — tried single-direction,
+      diagonal, AND multi-leg direction-combo navigation, all failed
+      to arrive within budget. Rather than keep burning effort on a
+      test-script pathfinding problem, fell back to reading the actual
+      function bodies: `updateCraftingPanel`'s craft-button click
+      handler explicitly calls `updateCraftingPanel(target)` again
+      immediately after `craftSpecific()` succeeds — this forces an
+      immediate signature recheck against the NEW post-spend resource
+      state, not a wait for the next frame's natural diff.
+      `updateDungeonPanel`'s tier-button click handler does the
+      identical thing after changing `selectedDungeonTierId`. Both
+      guarantee freshness is preserved by construction, not by
+      coincidence of timing — the signature check runs synchronously
+      inside the same click handler that caused the state change, so
+      there is no frame where stale content could be visible even
+      momentarily. This is a stronger guarantee than "it happened to
+      look fresh in one jsdom run," which is why direct code
+      verification was treated as sufficient here rather than
+      continuing to chase the pathing issue.)
+- [x] 3.2 Verify `resolvePendingDungeons()`/`applyUpkeep()` still run
       exactly as before if the fix touches `loop(now)`'s call pattern
-- [ ] 3.3 Standard verification: syntax, full import-graph trace,
+      (2026-08-05: read `loop(now)` in full — both calls are still
+      unconditional, every frame, at the exact same call sites as
+      before this fix [lines 651-652], completely outside and
+      unaffected by the panel-gating logic, which lives entirely
+      inside the 3 gated panel-update functions themselves. The fix
+      never touched `loop()`'s own call pattern at all — confirmed by
+      reading it, not assumed from the proposal's own framing.)
+- [x] 3.3 Standard verification: syntax, full import-graph trace,
       `node --test`
+      (2026-08-05: same standard sweep as the other 3 proposals this
+      session — see `add-crafting-cost-rebalance`'s 3.2 note for the
+      full breakdown; identical results [225/232, same 7 traced,
+      already-assigned failures, none of which trace to this
+      proposal specifically]. Also independently reconfirmed House
+      9/10's zero-overlap placement via `test/map.test.js` [5/5 pass,
+      same result Frontend's own 2.2 already reported].)
 
 ## Documentation & Testing
 - [ ] 4.1 Add regression coverage if feasible given this project's

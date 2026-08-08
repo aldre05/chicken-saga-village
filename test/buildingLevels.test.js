@@ -47,19 +47,64 @@ describe('buildingLevels.js', () => {
     assert.equal(getMaxWorkers('old_coop', levels), MAX_WORKER_SLOTS);
   });
 
-  test('rateMultiplierForLevel is 1 at level 1 and continuous across tier boundaries', () => {
+  test('rateMultiplierForLevel is exactly 1 at level 1 (no growth applied before any upgrade)', () => {
     assert.equal(rateMultiplierForLevel(1), 1);
-    // Tier 1: levels 1-10 @ +0.15/level. Level 10 => 1 + 9*0.15
-    const atTenExpected = 1 + 9 * 0.15;
-    assert.ok(Math.abs(rateMultiplierForLevel(10) - atTenExpected) < 1e-9);
-    // Tier 2 picks up exactly where tier 1 left off at level 11.
-    const atElevenExpected = atTenExpected + 1 * 0.20;
-    assert.ok(Math.abs(rateMultiplierForLevel(11) - atElevenExpected) < 1e-9);
-    // Level 20 -> level 21 crosses into tier 3 (+0.25/level)
-    const atTwentyExpected = atTenExpected + 10 * 0.20;
-    assert.ok(Math.abs(rateMultiplierForLevel(20) - atTwentyExpected) < 1e-9);
-    const atTwentyOneExpected = atTwentyExpected + 1 * 0.25;
-    assert.ok(Math.abs(rateMultiplierForLevel(21) - atTwentyOneExpected) < 1e-9);
+  });
+
+  // REGRESSION (add-tiered-production-scaling): replaced the OLD
+  // additive formula's assertions (levels 1-10 @ +0.15/level flat,
+  // then +0.20/level, then +0.25/level -- a linear-per-tier shape)
+  // with the new tiered COMPOUNDING formula: each level multiplies
+  // the previous level's rate by (1 + growthPerLevel) for its tier,
+  // not a flat per-level addition. Tier boundaries also moved (9/19
+  // instead of 10/20) and percentages changed (10%/15%/20% instead of
+  // 15%/20%/25%) -- see buildingLevels.js's own DECISION HISTORY
+  // comment for the full back-and-forth on the exact percentages.
+  // Expected values below are computed directly from the formula
+  // (levels 2-9: x1.10 each; 10-19: x1.15 each; 20+: x1.20 each) and
+  // cross-checked against design.md's own stated magnitude
+  // checkpoints (level 9~64/min, 19~260/min, 20~312/min, 50~74,107/min
+  // at a 30/min base rate) and tasks.md's Backend spot-check (level 5:
+  // 44/min, 15: 149/min, 25: 777/min, 35: 4,810/min) -- two
+  // independently-derived sources agreeing is stronger evidence than
+  // either alone.
+  test('rateMultiplierForLevel compounds exactly 10%/level through the first tier (levels 2-9)', () => {
+    assert.ok(Math.abs(rateMultiplierForLevel(2) - 1.1) < 1e-9);
+    assert.ok(Math.abs(rateMultiplierForLevel(5) - Math.pow(1.1, 4)) < 1e-9);
+    assert.ok(Math.abs(rateMultiplierForLevel(9) - Math.pow(1.1, 8)) < 1e-9);
+  });
+
+  test('level 10 is the FIRST level at the new (15%) tier rate, not one level late (the exact off-by-one design.md\'s own task warned about)', () => {
+    const atNine = Math.pow(1.1, 8);
+    const atTen = atNine * 1.15; // the boundary level itself uses the NEW tier's rate
+    assert.ok(Math.abs(rateMultiplierForLevel(10) - atTen) < 1e-9);
+  });
+
+  test('rateMultiplierForLevel compounds exactly 15%/level through the second tier (levels 10-19)', () => {
+    const atNineteen = Math.pow(1.1, 8) * Math.pow(1.15, 10); // 10 compounding steps: level 10 through 19
+    assert.ok(Math.abs(rateMultiplierForLevel(19) - atNineteen) < 1e-9);
+  });
+
+  test('level 20 is the FIRST level at the final (20%) tier rate', () => {
+    const atNineteen = Math.pow(1.1, 8) * Math.pow(1.15, 10);
+    const atTwenty = atNineteen * 1.20;
+    assert.ok(Math.abs(rateMultiplierForLevel(20) - atTwenty) < 1e-9);
+  });
+
+  test('rateMultiplierForLevel matches design.md\'s magnitude checkpoints at a 30/min base rate (level 9~64, 19~260, 20~312, 50~74,107)', () => {
+    const BASE_RATE = 30;
+    assert.ok(Math.abs(rateMultiplierForLevel(9) * BASE_RATE - 64.3) < 1, 'level 9 ~64/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(19) * BASE_RATE - 260.2) < 1, 'level 19 ~260/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(20) * BASE_RATE - 312.2) < 1, 'level 20 ~312/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(50) * BASE_RATE - 74107) < 10, 'level 50 ~74,107/min');
+  });
+
+  test('rateMultiplierForLevel matches tasks.md\'s independent Backend spot-check at levels 5/15/25/35', () => {
+    const BASE_RATE = 30;
+    assert.ok(Math.abs(rateMultiplierForLevel(5) * BASE_RATE - 44) < 1, 'level 5: 44/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(15) * BASE_RATE - 149) < 1, 'level 15: 149/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(25) * BASE_RATE - 777) < 1, 'level 25: 777/min');
+    assert.ok(Math.abs(rateMultiplierForLevel(35) * BASE_RATE - 4810) < 1, 'level 35: 4,810/min');
   });
 
   test('rateMultiplierForLevel is monotonically non-decreasing (no regressions across the whole curve)', () => {

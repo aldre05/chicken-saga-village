@@ -9,21 +9,31 @@ four proposals are fully merged into this spec; their
 `openspec/changes/` folders have been archived (deleted) per this
 project's standard process. Free, non-NFT in-game data only.
 
-### Recruitment — Lucky Wheel only (`add-recruit-via-lucky-wheel`)
-**Heroes are recruited exclusively via the Lucky Wheel now, not paid
-directly at the Barracks.** See lucky-wheel spec for the wheel's
-`hero` reward-table entry. This replaced the original design (a
-Recruit button at the Barracks, cost `{egg: 15, feathers: 20}`).
+### Recruitment — Lucky Wheel or gems, no direct resource purchase
+**Heroes are no longer recruited by paying resources directly at the
+Barracks.** `add-recruit-via-lucky-wheel` first replaced the original
+design (a Recruit button at the Barracks, cost `{egg: 15, feathers:
+20}`) with the Lucky Wheel as the sole source; `add-gems-currency`
+then added a second, still-not-resource-based path — buying a hero
+roll with gems. Both current paths produce the exact same hero shape
+via the same underlying construction logic (see `createRolledHero()`
+below) — neither is a "better" or different hero-generation path,
+just a different way to trigger the same roll:
+- **Won on the Lucky Wheel** — see lucky-wheel spec's `hero`
+  reward-table entry.
+- **Bought with gems** (`add-gems-currency`) — `buyHeroRollWithGems`
+  in `heroes.js`, cost `HERO_ROLL_GEM_COST`. See gems-currency spec
+  for the full gems model; this is one of gems' three spend sinks.
 
 The Barracks building itself is unchanged otherwise: unlock-gated at
 Town Hall 3, cost `{egg: 50, feathers: 30}`
 (`buildingUnlocks.js`'s `UNLOCK_CONFIG`). Standing near it still shows
 the roster management panel — every recruited hero's rarity icon,
 name, level, power, idle/busy status (with a live countdown while
-busy), plus heal/equip actions — it just no longer has a Recruit
-button. An empty roster shows "No heroes yet — win one on the Lucky
-Wheel." instead of a call-to-action button, so the panel never reads
-as broken or incomplete.
+busy), plus heal/equip actions, plus the gems-buy button — it just no
+longer has a resource-cost Recruit button. An empty roster shows "No
+heroes yet — win one on the Lucky Wheel." instead of a call-to-action
+button, so the panel never reads as broken or incomplete.
 
 **`createRolledHero()` vs. `recruitHero()` — a real split, not a
 rename.** `createRolledHero()` is the pure, cost-free hero-

@@ -4,11 +4,14 @@ import {
   DUNGEON_TIERS,
   DUNGEON_TIER_IDS,
   DUNGEON_KEY_ITEM_ID,
+  DUNGEON_KEY_GEM_COST,
   getDungeonTier,
   canSendHeroToDungeon,
   sendHeroToDungeon,
   resolveDungeon,
-  resolveReadyDungeons
+  resolveReadyDungeons,
+  canBuyDungeonKeyWithGems,
+  buyDungeonKeyWithGems
 } from '../js/dungeons.js';
 import { createHeroRosterState, recruitHero, isHeroIdle } from '../js/heroes.js';
 import { createResourceState } from '../js/resources.js';
@@ -404,6 +407,50 @@ describe('dungeons.js', () => {
       assert.equal(results.length, 2);
       assert.equal(heroA.dungeonTier, null);
       assert.equal(heroB.dungeonTier, null);
+    });
+  });
+
+  describe('buyDungeonKeyWithGems (add-gems-currency)', () => {
+    test('canBuyDungeonKeyWithGems / buyDungeonKeyWithGems reject at 1 gem below cost, succeed exactly at cost', () => {
+      const inventory = createInventoryState();
+      const short = { gems: DUNGEON_KEY_GEM_COST - 1 };
+      assert.equal(canBuyDungeonKeyWithGems(short), false);
+      assert.equal(buyDungeonKeyWithGems(short, inventory), false);
+      assert.equal(inventory[DUNGEON_KEY_ITEM_ID], undefined, 'a rejected purchase must not grant a key');
+
+      const exact = { gems: DUNGEON_KEY_GEM_COST };
+      assert.equal(canBuyDungeonKeyWithGems(exact), true);
+      assert.equal(buyDungeonKeyWithGems(exact, inventory), true);
+      assert.equal(exact.gems, 0);
+      assert.equal(inventory[DUNGEON_KEY_ITEM_ID], 1);
+    });
+
+    test('buyDungeonKeyWithGems deducts exactly DUNGEON_KEY_GEM_COST, no more no less', () => {
+      const gemsState = { gems: DUNGEON_KEY_GEM_COST + 100 };
+      const inventory = createInventoryState();
+      buyDungeonKeyWithGems(gemsState, inventory);
+      assert.equal(gemsState.gems, 100);
+    });
+
+    test('buyDungeonKeyWithGems stacks onto an existing key count rather than overwriting it', () => {
+      const gemsState = { gems: DUNGEON_KEY_GEM_COST * 2 };
+      const inventory = { [DUNGEON_KEY_ITEM_ID]: 3 };
+      buyDungeonKeyWithGems(gemsState, inventory);
+      assert.equal(inventory[DUNGEON_KEY_ITEM_ID], 4);
+    });
+
+    test('buyDungeonKeyWithGems never goes negative on gems even across repeated affordable purchases', () => {
+      const gemsState = { gems: DUNGEON_KEY_GEM_COST * 3 };
+      const inventory = createInventoryState();
+      for (let i = 0; i < 3; i++) {
+        assert.equal(buyDungeonKeyWithGems(gemsState, inventory), true);
+      }
+      assert.equal(gemsState.gems, 0);
+      assert.equal(inventory[DUNGEON_KEY_ITEM_ID], 3);
+      // A 4th purchase with 0 gems left must fail, not go negative.
+      assert.equal(buyDungeonKeyWithGems(gemsState, inventory), false);
+      assert.equal(gemsState.gems, 0);
+      assert.equal(inventory[DUNGEON_KEY_ITEM_ID], 3);
     });
   });
 });

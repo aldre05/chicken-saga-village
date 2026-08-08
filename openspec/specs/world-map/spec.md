@@ -40,17 +40,22 @@
   Workbench: both are buildings the player revisits often rather than
   a one-time resource stop, so they belong near where the player
   already spends time.
-- **House 6-10** (added by `add-th10-houses`) spread outward from the
-  central cluster rather than continuing to pack into it — by house 5,
-  the central area around Town Hall was already dense with Workbench,
-  Barracks, Dungeon Gate, and 5 houses, so houses 6-8 run down the
-  map's left side (col 6, rows 11/14/17) and houses 9-10 down the
-  right side (col 23/row 12, col 25/row 15), clear of the resource
-  cluster's footprint and existing decorative tree tiles (house_10 was
-  specifically shifted from its originally-planned column to clear a
-  tree tile it would otherwise have overlapped — noted inline in
-  map.js since it's the kind of placement decision that looks
-  arbitrary without the reason attached). Same collision verification
+- **House 6-10** (added by `add-th10-houses`, repositioned by
+  `fix-panel-click-reliability`) all sit in one shared 3-column grid
+  together with houses 1-5 — this is a correction of this spec's own
+  earlier claim that houses 6-10 "spread outward" onto the map's left/
+  right edges. That was true only briefly: houses 9-10 originally
+  launched east of the Town Hall cluster (a deliberate original
+  design choice, not a bug), but developer playtesting found that
+  confusing in practice, so `fix-panel-click-reliability` moved both
+  into the same grid as houses 6-8 (columns {6, 9, 12} × rows {11, 14,
+  17}). House 9 fills the grid's one genuinely empty slot (col 9, row
+  17); House 10 needed a slot the 3×3 grid doesn't have at all (no 4th
+  row fits before the map's border, no free column exists between the
+  grid and the vertical path) — extended one column further west
+  (col 3, row 17) instead, keeping the same 1-tile-gap spacing every
+  other column pair in the grid already uses. Checked against the pond
+  and the left map border; no overlap. Same collision verification
   applies as every other building.
 - **Exception**: the Lucky Wheel is NOT on the map — it's a fixed
   screen UI widget, not a walkable interactable (see lucky-wheel

@@ -73,6 +73,48 @@ panel to show.
   triggered by E-press alone (an earlier version auto-upgraded on E,
   which felt wrong and was explicitly reworked).
 
+### Panel click reliability — signature-gated rebuilds (`fix-panel-click-reliability`)
+**Panel content (Crafting Panel, hero roster panel, dungeon picker)
+rebuilds its DOM from scratch every single frame it's visible, not
+just when something relevant actually changed.** This was a real,
+shipped bug, not a hypothetical: rebuilding via `innerHTML = ''` +
+re-append destroys and recreates every button element each frame,
+which meant a click landing between "old button removed" and "new
+button attached" (a real, non-rare window at 60fps, not a contrived
+edge case) silently did nothing — the click event had nowhere to
+land. This showed up as "sometimes clicking Craft/Send/Upgrade just
+doesn't do anything," reproducible, not intermittent hardware flake.
+
+**Fixed via signature-gated rebuilds**: each panel-update function
+computes a cheap string signature capturing everything that could
+visibly change about the panel (e.g. the Crafting Panel's signature is
+`` `${target.id}|${affordableIds}` `` — the target building plus which
+recipes are currently affordable) and only tears down/rebuilds the DOM
+when that signature actually differs from the last frame's. On an
+unchanged signature, the function returns immediately, leaving the
+existing DOM nodes (and their attached click listeners) completely
+untouched — a click landing mid-frame now always lands on a stable,
+already-listening element. This pattern was already partially in use
+(`updateBuildingPanel`'s upgrade-button re-render) and got
+consistently extended to the Crafting Panel, hero roster panel, and
+dungeon picker, which hadn't had it. A panel that doesn't need
+per-frame content changes at all (e.g. a panel with no dynamic
+affordability state) doesn't need the signature-gating pattern in the
+first place — it's specifically for panels whose content can go stale
+across frames, not a blanket rule applied everywhere.
+
+**Test coverage**: this is a DOM node-identity/lifecycle bug — the
+kind of thing that's only meaningfully regression-tested against a
+real DOM (verifying rebuild vs. no-rebuild actually preserves node
+identity across frames), which this project's test suite doesn't have
+access to (see "Test coverage gap" below — same jsdom question,
+unresolved). Not unit-tested; instead flagged as a specific manual
+playtest checklist item (see memory.md's Active Tasks) rather than
+folded into a generic "playtest in browser sometime" note, since the
+failure mode (rapid-clicking Craft/Send/Upgrade buttons) is specific
+enough to be worth checking deliberately, not just eyeballing the UI
+once.
+
 ### Test coverage gap — flagged, not silently skipped
 `main.js` (including all of the above — click hit-testing, selection
 state, panel show/hide) is DOM/Canvas glue and is **not** covered by
@@ -110,3 +152,10 @@ in this codebase.
   (an NPC with nothing to click-configure; Town Hall's actionable
   content is its Upgrade button, which already lives in the Building
   Panel, not the dialogue).
+- **Any new panel whose content can change frame-to-frame (affordable
+  recipes, roster state, disabled-reason text, etc.) must use the
+  signature-gated rebuild pattern**, not unconditional `innerHTML = ''`
+  + re-append every frame — see "Panel click reliability" above for
+  the exact bug this prevents. A panel with genuinely static content
+  once shown doesn't need this; the pattern is for panels whose
+  displayed state can go stale, not a blanket rule.

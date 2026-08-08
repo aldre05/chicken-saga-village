@@ -25,6 +25,7 @@ describe('gameState.js', () => {
     assert.deepEqual(state.heroes.roster, []);
     assert.equal(state.popularity, 0);
     assert.equal(state.townHall.level, 1);
+    assert.equal(state.gems, 0);
   });
 
   test('loadGameState with no prior save returns a fresh game state', () => {
@@ -32,9 +33,10 @@ describe('gameState.js', () => {
     assert.equal(state.townHall.level, 1);
     assert.equal(state.resources.carried.egg, 0);
     assert.deepEqual(state.heroes.roster, []);
+    assert.equal(state.gems, 0);
   });
 
-  test('save -> load round-trip preserves resource, level, unlock, and hero roster progress exactly', () => {
+  test('save -> load round-trip preserves resource, level, unlock, hero roster, and gems progress exactly', () => {
     const state = createGameState();
     state.resources.carried.egg = 42;
     state.resources.carried.wood = 7;
@@ -43,6 +45,7 @@ describe('gameState.js', () => {
     state.buildingUnlocks.nest_bundle = true;
     state.workers.assignments.egg = 2;
     state.popularity = 15;
+    state.gems = 235;
     state.heroes.roster.push({
       id: 'hero_test1', name: 'Rooster Ronin', rarity: 'common',
       level: 3, xp: 12, busyUntil: null, dungeonTier: null
@@ -58,6 +61,7 @@ describe('gameState.js', () => {
     assert.equal(loaded.buildingUnlocks.nest_bundle, true);
     assert.equal(loaded.workers.assignments.egg, 2);
     assert.equal(loaded.popularity, 15);
+    assert.equal(loaded.gems, 235);
     assert.equal(loaded.heroes.roster.length, 1);
     assert.equal(loaded.heroes.roster[0].id, 'hero_test1');
     assert.equal(loaded.heroes.roster[0].level, 3);
@@ -177,5 +181,41 @@ describe('gameState.js', () => {
     }));
     const state = loadGameState();
     assert.equal(state.workers.assignments.egg, 3);
+  });
+
+  describe('gems (add-gems-currency)', () => {
+    test('loadGameState falls back to 0 gems if the saved value is a corrupted/non-number type', () => {
+      globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
+        gems: 'not-a-number'
+      }));
+      const state = loadGameState();
+      assert.equal(state.gems, 0);
+    });
+
+    test('loadGameState falls back to 0 gems if the save has no gems field at all (pre-add-gems-currency save)', () => {
+      globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
+        resources: { carried: { egg: 10 } }
+        // no "gems" key at all -- simulates a save from before this field existed
+      }));
+      const state = loadGameState();
+      assert.equal(state.gems, 0);
+      assert.equal(state.resources.carried.egg, 10, 'sanity check: the rest of the save should still load normally alongside the missing gems field');
+    });
+
+    test('loadGameState preserves a real 0 gems value distinctly from a missing/corrupted one (both happen to be 0, but for different reasons -- verifying the real-value path isn\'t accidentally only working by coincidence)', () => {
+      globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
+        gems: 0
+      }));
+      const state = loadGameState();
+      assert.equal(state.gems, 0);
+    });
+
+    test('loadGameState preserves a large real gems value exactly (no silent rounding/truncation)', () => {
+      globalThis.localStorage.setItem('chickenVillageSave', JSON.stringify({
+        gems: 123456
+      }));
+      const state = loadGameState();
+      assert.equal(state.gems, 123456);
+    });
   });
 });

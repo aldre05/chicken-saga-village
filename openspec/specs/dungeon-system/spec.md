@@ -64,6 +64,10 @@ is obtained two ways:
   always exactly 1 key per win, never scaled by Town Hall level (a
   discrete item count, not a resource quantity — see lucky-wheel
   spec's `getRewardScale` exemption).
+- **Bought with gems** (`add-gems-currency`) — `buyDungeonKeyWithGems`
+  in `dungeons.js`, cost `DUNGEON_KEY_GEM_COST`, an alternative gems
+  sink to crafting/winning one rather than a third genuinely different
+  source. See gems-currency spec for the full gems model.
 
 The key is spent once, at send time, regardless of eventual mission
 outcome — **not refunded on failure**, same non-refundable spirit as

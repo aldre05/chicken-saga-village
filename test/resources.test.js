@@ -10,7 +10,10 @@ import {
   flushAndResetCheckpoint,
   collectFromBuilding,
   canAfford,
-  spendResources
+  spendResources,
+  GEM_TO_RESOURCE_RATE,
+  canExchangeGemsForResource,
+  exchangeGemsForResource
 } from '../js/resources.js';
 
 describe('resources.js', () => {
@@ -138,5 +141,65 @@ describe('resources.js', () => {
   test('canAfford treats an empty cost dict as always affordable', () => {
     const state = createResourceState();
     assert.equal(canAfford(state, {}), true);
+  });
+
+  describe('exchangeGemsForResource (add-gems-currency)', () => {
+    test('canExchangeGemsForResource requires a positive gem amount AND enough gems', () => {
+      const gemsState = { gems: 10 };
+      assert.equal(canExchangeGemsForResource(gemsState, 0), false, 'a 0-gem exchange is meaningless, must be rejected');
+      assert.equal(canExchangeGemsForResource(gemsState, -5), false, 'a negative amount must be rejected, not silently granted as a refund');
+      assert.equal(canExchangeGemsForResource(gemsState, 11), false, 'one more than available must be rejected');
+      assert.equal(canExchangeGemsForResource(gemsState, 10), true, 'exactly the available amount must succeed');
+    });
+
+    test('exchangeGemsForResource grants exactly gemAmount * GEM_TO_RESOURCE_RATE and deducts exactly gemAmount, for every one of the 6 resources', () => {
+      for (const resourceId of RESOURCE_IDS) {
+        const gemsState = { gems: 20 };
+        const resources = createResourceState();
+        const before = resources.carried[resourceId];
+        const beforeTotal = resources.totalCollected[resourceId];
+
+        const result = exchangeGemsForResource(gemsState, resources, resourceId, 3);
+        assert.equal(result, true, `exchange for ${resourceId} should succeed`);
+        assert.equal(gemsState.gems, 17);
+        assert.equal(resources.carried[resourceId], before + 3 * GEM_TO_RESOURCE_RATE);
+        assert.equal(resources.totalCollected[resourceId], beforeTotal + 3 * GEM_TO_RESOURCE_RATE, 'totalCollected should credit an exchange the same as any other resource-crediting path');
+      }
+    });
+
+    test('exchangeGemsForResource rejects an unknown resource id, without touching gems at all', () => {
+      const gemsState = { gems: 20 };
+      const resources = createResourceState();
+      const result = exchangeGemsForResource(gemsState, resources, 'not_a_real_resource', 3);
+      assert.equal(result, false);
+      assert.equal(gemsState.gems, 20, 'a rejected exchange must not deduct gems even if the resource id is bogus');
+    });
+
+    test('exchangeGemsForResource rejects an unaffordable exchange without mutating either gems or resources', () => {
+      const gemsState = { gems: 2 };
+      const resources = createResourceState();
+      const before = resources.carried.egg;
+      const result = exchangeGemsForResource(gemsState, resources, 'egg', 5);
+      assert.equal(result, false);
+      assert.equal(gemsState.gems, 2);
+      assert.equal(resources.carried.egg, before);
+    });
+
+    test('exchangeGemsForResource credits carried uncapped, matching every other resource-crediting path (not bounded by RESOURCE_CONFIG.cap)', () => {
+      const gemsState = { gems: 100000 };
+      const resources = createResourceState();
+      const cap = RESOURCE_CONFIG.egg.cap;
+      exchangeGemsForResource(gemsState, resources, 'egg', 100000);
+      assert.ok(resources.carried.egg > cap, `expected an uncapped credit to exceed the building-buffer cap (${cap}), got ${resources.carried.egg}`);
+    });
+
+    test('repeated exchanges accumulate rather than overwrite', () => {
+      const gemsState = { gems: 10 };
+      const resources = createResourceState();
+      exchangeGemsForResource(gemsState, resources, 'wood', 2);
+      exchangeGemsForResource(gemsState, resources, 'wood', 3);
+      assert.equal(resources.carried.wood, 5 * GEM_TO_RESOURCE_RATE);
+      assert.equal(gemsState.gems, 5);
+    });
   });
 });

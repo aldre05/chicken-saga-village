@@ -42,38 +42,61 @@
   pointless once resource counts got large. This scaling applies to
   raw-resource rewards only (see below).
 - **Reward table now includes non-resource rewards, not just raw
-  resources** (`add-dungeon-keys`, `add-recruit-via-lucky-wheel`):
-  a `dungeon_key` inventory item (weight 5) and a `hero` recruitment
-  (weight 4, rarer than a key, since a hero is the bigger prize).
-  `spinWheel()`'s reward-branch logic distinguishes three cases by
+  resources** (`add-dungeon-keys`, `add-recruit-via-lucky-wheel`,
+  `add-gems-currency`): a `dungeon_key` inventory item (weight 5), a
+  `hero` recruitment (weight 4, rarer than a key, since a hero is the
+  bigger prize), and a `gems` reward (amount 5 per win — see
+  gems-currency spec, this is gems' only earn path).
+  `spinWheel()`'s reward-branch logic distinguishes four cases by
   `entry.resource`'s identity: a raw resource (in `RESOURCE_IDS`) adds
   to `resourceState.carried`; `dungeon_key` (or any future crafted-
   item reward) adds to `inventoryState` via the same resource-vs-item
   distinction `crafting.js`'s `splitCost()` draws; the literal string
   `'hero'` is a dedicated branch that calls `heroes.js`'s
   `createRolledHero()` and pushes the result onto `rosterState.roster`
-  directly rather than incrementing any count. This required
-  `spinWheel()` to gain required `inventoryState`/`rosterState`
-  params (signature change, not additive-only — same precedent as
-  `add-hero-classes`' `getCraftableRecipes` change; every call site
-  needed updating, both in `main.js` and the test suite).
-- **Non-resource rewards are NEVER Town-Hall-level-scaled.** A key or
-  a hero is a discrete count/event, not a quantity — "1.75 keys" or
-  "2 heroes from one spin" has no game-design meaning the way "12 eggs
-  instead of 5" does. `getRewardScale()` is applied only when
-  `entry.resource` is a raw resource; key/hero rewards always pay out
-  exactly `baseEntry.amount` (1 for both) regardless of Town Hall
-  level.
+  directly rather than incrementing any count; the literal string
+  `'gems'` is a dedicated branch that adds directly to
+  `gemsState.gems`. The `'gems'` branch specifically had to be its own
+  dedicated case, not folded into the generic resource/item handling
+  — `'gems'` isn't in `RESOURCE_IDS` (it's not a raw resource) and
+  isn't a `crafting.js` recipe id either (nothing "crafts" gems), so
+  without a dedicated branch it would have silently fallen into the
+  inventory-item catch-all and been added to `inventoryState.gems`
+  instead of `gemsState.gems` — a real bug caught and fixed before
+  shipping, not a hypothetical (see `test/luckyWheel.test.js`'s
+  regression test asserting `inventoryState` stays untouched on a
+  gems-reward spin). This required `spinWheel()` to gain a required
+  `gemsState` param on top of the earlier `inventoryState`/
+  `rosterState` additions (signature change, not additive-only — same
+  precedent as `add-hero-classes`' `getCraftableRecipes` change; every
+  call site needed updating, both in `main.js` and the test suite).
+- **Non-resource rewards are NEVER Town-Hall-level-scaled.** A key, a
+  hero, or a gems payout is a discrete count/event, not a quantity —
+  "1.75 keys," "2 heroes from one spin," or "8.75 gems" has no
+  game-design meaning the way "12 eggs instead of 5" does.
+  `getRewardScale()` is applied only when `entry.resource` is a raw
+  resource; key/hero/gems rewards always pay out exactly
+  `baseEntry.amount` (1, 1, and 5 respectively) regardless of Town
+  Hall level.
 - Winning a hero via the wheel produces the exact same hero shape as
   the old paid Barracks recruit path did (field-for-field identical,
   test-verified) — see hero-system spec for the
   `createRolledHero()`/`recruitHero()` split that guarantees this.
-- Purely non-monetary: no real tickets-for-cash, no gacha-for-money,
-  no PvP "steal" item. This was a deliberate design choice to prove
-  out the engagement loop for free before any monetization
-  conversation, which stays deferred pending legal review regardless.
-  This now extends to hero recruitment too — heroes are a gacha-style
-  reward, but still entirely free, no real-money gacha mechanics.
+- **Ticket-spending itself is still free-only — no real-money
+  ticket purchase, gacha-for-money, or PvP "steal" item exists in the
+  current implementation.** This was originally framed as "deferred
+  pending legal review, full stop" — that blanket framing is stale
+  (see gems-currency spec's write-up of the 2026-08-01 reversal to a
+  standard Web2 paid-game-economy model; corrected here for the same
+  reason). The accurate framing now: real-money monetization is an
+  accepted future direction by developer decision, but nothing here
+  implements it yet, and the wheel's loot-box/gacha structure (a
+  random-reward spin, not a direct known-item purchase) is specifically
+  the shape that carries real jurisdiction-dependent legal weight if a
+  real-money path is ever attached to it — worth being deliberate
+  about, not a rubber-stamp extension of "gems already sort of work
+  like this." This extends to hero recruitment and gems too — both are
+  gacha-style/wheel-earned rewards, currently entirely free either way.
 - Landing on a hero (vs. a resource reward) gets a distinctly different
   visual/popup treatment, not just different text — same principle
   already applied to dungeon success vs. failure popups (see
@@ -81,10 +104,11 @@
   and should read as a genuinely different moment.
 
 ## Constraints for future changes
-- If a "buy tickets with real money" or gacha-adjacent feature is ever
-  proposed, it goes through the same legal-review gate as every other
-  monetization-adjacent idea — this spec being "done" doesn't change
-  that.
+- If a "buy tickets with real money" or gacha-adjacent monetization
+  feature is ever proposed for this wheel, treat the random-reward-
+  spin-vs-direct-purchase legal distinction (see gems-currency spec)
+  as a real design input for that proposal — not something to default
+  past because the currency plumbing already exists.
 - Reward table lives in `luckyWheel.js`'s `REWARD_TABLE` — segment
   colors and weights both come from there, so the visual wheel and
   actual odds can never drift out of sync.
@@ -103,3 +127,13 @@
 - Keep non-resource reward amounts exempt from `getRewardScale()` —
   don't scale a discrete item/hero count just because resource rewards
   do.
+- **Any new non-resource reward type needs an `ITEM_CONFIG` entry in
+  `main.js`, not just a `spinWheel()` branch.** `iconFor()`/`nameFor()`
+  (used by both the wheel segment label and the win popup) look up a
+  reward id in `RESOURCE_CONFIG` first, then `ITEM_CONFIG`, falling
+  back to a generic `❔` placeholder if neither has it. The `gems`
+  reward shipped without an `ITEM_CONFIG` entry initially — a real,
+  always-visible bug (the gems wheel segment showed `❔` on every page
+  load, not just an edge case), found and fixed while writing this
+  spec. Adding a reward to `REWARD_TABLE` is not sufficient by itself;
+  check `iconFor`/`nameFor` resolve it correctly too.

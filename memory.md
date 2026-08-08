@@ -80,37 +80,68 @@ single passing jsdom run would have been anyway, since it holds by
 construction rather than by observed timing). Full suite: 225/232
 throughout, all 7 traced to already-known causes, nothing new.
 
+## Current Status
+**Documentation & Testing is done for all 4 proposals**
+(`fix-panel-click-reliability`, `add-tiered-production-scaling`,
+`add-crafting-cost-rebalance`, `add-gems-currency`) — all 4
+`openspec/changes/` folders archived, all 7 previously-failing tests
+fixed properly (not skipped), full suite 261/261 (up from 226/233 at
+session start). New `openspec/specs/gems-currency/spec.md` written;
+`dungeon-system`, `hero-system`, `lucky-wheel`, `resource-production`,
+`crafting-system`, `interaction-system`, and `world-map` specs all
+updated to match shipped reality.
+
+**Found and fixed a real, always-visible bug while writing the gems
+spec**: `main.js`'s `ITEM_CONFIG` had no entry for the `'gems'` reward
+id, so `iconFor('gems')` silently fell back to a `❔` placeholder —
+the Lucky Wheel's gems segment showed a question mark instead of 💎 on
+every single page load, not an edge case. One-line fix; added a
+forward-looking constraint to the lucky-wheel spec so a future
+non-resource reward type doesn't repeat the same gap.
+
+**Also caught and corrected a real self-inconsistency**: while writing
+`gems-currency/spec.md` and updating `lucky-wheel/spec.md` earlier in
+this same session, both initially described monetization as "stays
+deferred pending legal review" — stale language carried over from
+before the 2026-08-01 reversal to a Web2 paid-game-economy model (this
+file's own "Current Objective" header already reflected the reversal
+correctly; the specs I was writing hadn't caught up to it yet).
+Re-read the Decisions entry below mid-session, caught the
+contradiction against my own just-written text, and corrected both
+specs before finishing — worth noting explicitly rather than quietly
+fixing it, since it's a real instance of "verify against current
+project state, don't assume a phrase you're about to write is still
+accurate just because it sounds like standard boilerplate."
+
 ## Active Tasks
-1. Documentation & Testing passes for all 4 proposals reviewed this
-   session — this is now the actual next step: fix the 7 currently-
-   failing tests (old-formula/old-cost/old-reward-table assumptions
-   in `buildingLevels.test.js`/`crafting.test.js`/`luckyWheel.test.js`
-   — traced precisely in each proposal's own tasks.md 3.x notes),
-   update the relevant specs (`resource-production`,
-   `crafting-system`, `lucky-wheel`, `interaction-system`), and
-   archive all 4 `openspec/changes/` folders once done.
-2. **Still open — found by a prior session, not fixed by anyone yet,
+1. **Still open — found by a prior session, not fixed by anyone yet,
    now flagged across 5+ sessions:** `applyUpkeep()` in `main.js`'s
    `loop(now)` still receives the `requestAnimationFrame` timestamp
    instead of `Date.now()`. Worth a session specifically dedicated to
    this rather than continuing to note it in passing.
-3. Real art integration (still 100% placeholder) — unchanged.
-4. **Playtest all 10 shipped features in an actual browser** — still
-   nobody has actually clicked through this live. In particular,
-   Dungeon Gate's tier/champion pickers and its Buy Key button remain
-   the one area resting on code-review confidence (now reinforced
-   twice, by both a Frontend and a Code Reviewer session
-   independently hitting and documenting the same jsdom pathing
-   limit) rather than a passing live-DOM test — worth specifically
-   prioritizing within this playtest.
-5. jsdom-as-committed-devDependency question — still undecided. This
-   session used it again, temporarily, hit the exact same Dungeon
-   Gate pathing wall a prior session already documented — if this
-   keeps recurring across sessions, it may be worth someone
-   deliberately fixing the pathing (e.g. a `warpPlayerTo()` test-only
-   debug hook) rather than re-attempting fresh navigation logic each
-   time. Flagging as a possible process improvement, not deciding it
-   unilaterally.
+2. Real art integration (still 100% placeholder) — unchanged.
+3. **Playtest all 10 shipped features in an actual browser** — still
+   nobody has actually clicked through this live. In particular:
+   - Dungeon Gate's tier/champion pickers and its Buy Key button
+     remain the one area resting on code-review confidence (reinforced
+     three times now — Frontend, Code Reviewer, and this session's
+     decision not to attempt a 4th jsdom run — all independently
+     hitting the same pathing limit) rather than a passing live-DOM
+     test.
+   - **New, specific item from this session**: rapid-clicking the
+     Workbench Craft button, the Dungeon Gate's tier/Send buttons, and
+     the hero roster's action buttons, to confirm
+     `fix-panel-click-reliability`'s signature-gating fix actually
+     holds up under real click timing (not just the synchronous-
+     reinvocation code-review argument this session's spec write-up
+     relied on).
+4. jsdom-as-committed-devDependency question — still undecided across
+   multiple sessions now. Given the Dungeon Gate pathing wall has now
+   been hit independently by 3+ sessions, worth a future session
+   deliberately fixing the pathing itself (e.g. a `warpPlayerTo()`
+   test-only debug hook) rather than re-attempting fresh navigation
+   logic each time — flagging as a possible process improvement, not
+   deciding it unilaterally.
 
 ## Code Reviewer Session: Panel Click Reliability + Production Scaling + Cost Rebalance + Gems Currency (2026-08-05)
 Fresh clone per standing instruction, HEAD `3cc8fed`.
@@ -2877,3 +2908,157 @@ application), not meant to live in the repo.
   long-flagged `applyUpkeep()` clock-mismatch bug (4+ sessions noted,
   still nobody assigned) remains the most notable unowned item if a
   future session has no queued proposal to pick up.
+- **2026-08-06 (Documentation & Testing — Panel Click Reliability +
+  Production Scaling + Cost Rebalance + Gems Currency)**: Fresh clone
+  per standing instruction, restated again this session (the exact
+  practice that's kept the stale-folder failure mode from recurring —
+  worth continuing to say every time). Confirmed all 4 proposals'
+  Backend/Frontend/Code Reviewer sections were complete, only
+  Documentation & Testing (4.x) open on each.
+
+  **Fixed all 7 previously-failing tests** (not skipped), each traced
+  to a real, expected cause rather than assumed: `buildingLevels.test.js`'s
+  `rateMultiplierForLevel` test asserted the OLD additive formula —
+  rewrote entirely for the new tiered-compounding one, computing exact
+  expected values directly (not eyeballed) and cross-checking against
+  both `design.md`'s stated magnitude checkpoints AND `tasks.md`'s
+  independently-derived Backend spot-check, since two independently-
+  arrived-at sources agreeing is stronger evidence than either alone.
+  `crafting.test.js`'s 4 failures were all stale pre-rebalance cost
+  values (Boots' plank amount, chicken_feed's rice amount, etc.) —
+  updated to the actual shipped costs, with one genuine logic wrinkle
+  caught along the way: at `rice=35` (chicken_feed's cost), Heal
+  Potion (`rice=10`, cheaper) also becomes affordable, so the original
+  test's "only chicken_feed affordable" assumption was actually wrong
+  on its own terms, not just stale — fixed the assertion to expect
+  both, not just re-target the same wrong shape at new numbers.
+  `luckyWheel.test.js`'s 2 failures were `spinWheel()`'s new required
+  `gemsState` parameter missing from every call site — added via a
+  `freshGems()` helper, same pattern as the `fundedInventory()`/
+  `freshRoster()` helpers from a prior session's dungeon-keys/
+  recruit-via-wheel work.
+
+  **New coverage added, well beyond the minimum to go green**: a
+  dedicated deterministic (mocked `Math.random`) gems-reward-branch
+  test in `luckyWheel.test.js`, including an explicit regression test
+  proving a gems-reward spin does NOT fall into the generic inventory-
+  item catch-all (`inventoryState` stays `{}`) — this is the exact bug
+  class the Code Reviewer session's own notes said they caught and fixed
+  before shipping, now guarded permanently rather than trusted to code
+  review alone next time something touches that branch logic.
+  `gameState.test.js` gained gems save/load coverage (missing field,
+  corrupted type, real-zero-vs-missing-zero, large-value precision).
+  `dungeons.test.js` gained a full `buyDungeonKeyWithGems` suite (cost
+  boundary, exact deduction, stacking, never-goes-negative across
+  repeated purchases). `heroes.test.js` gained the equivalent
+  `buyHeroRollWithGems` suite, including a test pinning that its
+  return value is the actual hero object — a deliberate deviation from
+  `design.md`'s own code snippet (which returned a bare `true`) that's
+  now locked in as the real, correct contract rather than left
+  undocumented. `resources.test.js` gained `exchangeGemsForResource`
+  coverage across all 6 resources (not just one, to catch any
+  resource-specific miswiring), including confirming exchanged
+  resources credit `carried` uncapped like every other credit path.
+  Suite finished at **261/261 passing** (was 226/233 at session
+  start).
+
+  **Found and fixed a real bug**, not just a doc gap: cross-checking
+  `main.js`'s wheel-result rendering code while writing the gems spec
+  surfaced that `ITEM_CONFIG` had no `gems` entry, so `iconFor('gems')`
+  fell through to the generic `❔` placeholder — affecting BOTH the
+  wheel segment's own label (visible on every page load, not just a
+  win) and the win popup. One-line, safe fix (`gems: { icon: '💎' }`
+  added to `ITEM_CONFIG`); added a forward-looking constraint to the
+  lucky-wheel spec (any new non-resource reward type needs an
+  `ITEM_CONFIG` entry, not just a `spinWheel()` branch) so this exact
+  bug class doesn't recur with the next reward type.
+
+  **Wrote `openspec/specs/gems-currency/spec.md` from scratch** (data
+  model — flat `gameState.gems`, resolving a real flat-vs-wrapped
+  contradiction between `design.md`'s own Data Model and Spend
+  Use-Cases sections in favor of flat, per task 1.1's literal
+  wording; the 3 independent spend sinks; the Lucky-Wheel-only earn
+  path) and updated `dungeon-system`/`hero-system`/`lucky-wheel` specs
+  with cross-references to the new gems sinks. Updated
+  `resource-production/spec.md`, which still described the OLD
+  additive rate formula in full — this was the actual canonical spec
+  location for that formula (not just the test file), so it needed
+  the same rewrite `buildingLevels.test.js` got, with a new
+  forward-looking constraint against reverting to additive scaling.
+  Updated `crafting-system/spec.md` with every rebalanced cost and an
+  explicit, testable claim that `brick`/`ingot` currently have zero
+  consumers — a real, flagged consequence of a cost-increase-only pass
+  making an already-thin use case into a genuinely dead one, not
+  silently left implicit.
+
+  **Caught and corrected a real self-inconsistency mid-session**:
+  both `gems-currency/spec.md` (freshly written this session) and the
+  `lucky-wheel/spec.md` edits made earlier this same session initially
+  said monetization "stays deferred pending legal review" — stale
+  language that predates the 2026-08-01 reversal to a Web2
+  paid-game-economy model (already correctly reflected in this file's
+  own "Current Objective" header, which a prior Frontend session had
+  fixed — the specs just hadn't caught up). Caught while re-reading
+  the Decisions section for this update, not by a separate review
+  pass — re-read both specs against the actual current decision and
+  rewrote the affected sections rather than leaving the contradiction
+  for a future session to trip over. Also incorporated the
+  loot-box-vs-direct-purchase legal distinction (already noted in
+  Decisions) into both specs' forward-looking constraints, since it's
+  exactly the kind of thing a spec should carry forward rather than
+  require re-deriving from memory.md's Decisions every time someone
+  reasons about a future monetization feature.
+
+  Updated `interaction-system/spec.md` with a new "Panel click
+  reliability" section (root cause — destroy-and-recreate DOM every
+  frame racing real click event pairs — and the signature-gated
+  rebuild fix, generalized as a forward-looking constraint for any
+  future dynamic panel) and `world-map/spec.md` (corrected this
+  spec's own prior claim that houses 6-10 "spread outward" onto the
+  map's edges — that was only briefly true; houses 9-10 were
+  subsequently moved into the same central grid as 1-8, verified
+  directly against `map.js`'s actual current coordinates rather than
+  trusted from the spec's own earlier prose).
+
+  **Deliberately did not add a jsdom-based regression test** for
+  `fix-panel-click-reliability` itself, despite it being exactly the
+  kind of DOM node-identity bug a real DOM would meaningfully verify —
+  consistent with the still-undecided jsdom-as-dependency question
+  flagged repeatedly across prior sessions. Documented that reasoning
+  explicitly in the interaction-system spec rather than silently
+  leaving the gap unmentioned, and added a specific (not generic)
+  manual-playtest checklist item to Active Tasks instead — rapid-
+  clicking the exact 3 button groups this bug affected, not just
+  "playtest sometime."
+
+  Deleted all 4 merged `openspec/changes/` folders per the standard
+  archive step.
+
+  Verification: `node --check` on every `js/*.js` file, full suite
+  261/261 passing, confirmed at multiple checkpoints as tests were
+  added file-by-file. No push credentials in this sandbox (same as
+  every prior session); packaged as a patch + zip for manual
+  application. Files added: `openspec/specs/gems-currency/spec.md`.
+  Files modified: `js/main.js` (the gems icon bug fix),
+  `test/buildingLevels.test.js`, `test/crafting.test.js`,
+  `test/dungeons.test.js`, `test/gameState.test.js`,
+  `test/heroes.test.js`, `test/luckyWheel.test.js`,
+  `test/resources.test.js`, `openspec/specs/dungeon-system/spec.md`,
+  `openspec/specs/hero-system/spec.md`,
+  `openspec/specs/lucky-wheel/spec.md`,
+  `openspec/specs/resource-production/spec.md`,
+  `openspec/specs/crafting-system/spec.md`,
+  `openspec/specs/interaction-system/spec.md`,
+  `openspec/specs/world-map/spec.md`, `memory.md`. Folders deleted:
+  `openspec/changes/add-crafting-cost-rebalance/`,
+  `openspec/changes/add-gems-currency/`,
+  `openspec/changes/add-tiered-production-scaling/`,
+  `openspec/changes/fix-panel-click-reliability/`.
+  **Next recommended task:** `applyUpkeep()`'s clock-mismatch bug is
+  now flagged across 6+ sessions with nobody assigned — the single
+  most concrete, actionable, longest-unpicked-up item in this file.
+  Otherwise: an actual human playtest, specifically prioritizing
+  Dungeon Gate's pickers/Buy Key button and rapid-clicking the panel
+  buttons `fix-panel-click-reliability` touched — both are currently
+  verified only by code-review confidence, not a live human or a
+  passing live-DOM test.

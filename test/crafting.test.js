@@ -40,20 +40,58 @@ describe('crafting.js', () => {
     assert.equal(new Set(ids).size, ids.length);
   });
 
-  test('the 5 equipment recipes + Heal Potion exist with the exact costs from design.md', () => {
+  // REGRESSION (add-crafting-cost-rebalance): every cost below was
+  // increased by the developer's explicit request (refined goods
+  // ~7-9x, equipment ~2.5x — see crafting.js's own comment for the
+  // full reasoning and the stale-design.md-baseline note). Pinned
+  // against the ACTUAL shipped RECIPES array, verified directly
+  // against the live file, not design.md's own "Context" baseline
+  // (which the file's comment explicitly flags as stale/never-
+  // implemented).
+  test('the 6 refined-goods recipes match the actual shipped (rebalanced) costs', () => {
     const expected = {
-      sword: { ore: 15, wood: 5 },
-      bow: { wood: 15, feathers: 10 },
-      staff: { wood: 10, stone: 10 },
-      armor: { ore: 10, stone: 10 },
-      boots: { plank: 3, feathers: 5 },
-      heal_potion: { rice: 10 }
+      nest_charm: { egg: 20, feathers: 15 },
+      basket: { egg: 15, wood: 20 },
+      chicken_feed: { rice: 35 },
+      plank: { wood: 5 },
+      brick: { stone: 5 },
+      ingot: { ore: 5 }
     };
     for (const [id, cost] of Object.entries(expected)) {
       const recipe = getRecipeById(id);
       assert.ok(recipe, `expected a "${id}" recipe to exist`);
-      assert.deepEqual(recipe.cost, cost, `"${id}" cost doesn't match design.md`);
+      assert.deepEqual(recipe.cost, cost, `"${id}" cost doesn't match the actual shipped RECIPES array`);
     }
+  });
+
+  test('the 5 equipment recipes + Heal Potion match the actual shipped (rebalanced) costs', () => {
+    const expected = {
+      sword: { ore: 35, wood: 15 },
+      bow: { wood: 35, feathers: 20 },
+      staff: { wood: 25, stone: 25 },
+      armor: { ore: 25, stone: 25 },
+      boots: { plank: 6, feathers: 15 },
+      heal_potion: { rice: 10 } // unaffected by the rebalance
+    };
+    for (const [id, cost] of Object.entries(expected)) {
+      const recipe = getRecipeById(id);
+      assert.ok(recipe, `expected a "${id}" recipe to exist`);
+      assert.deepEqual(recipe.cost, cost, `"${id}" cost doesn't match the actual shipped RECIPES array`);
+    }
+  });
+
+  test('brick and ingot have zero consumers anywhere in RECIPES (a known, flagged gap -- not fixed this rebalance, cost-increase-only was the developer\'s explicit scope)', () => {
+    // Documented directly in crafting.js's own comment: this rebalance
+    // made the gap WORSE than design.md's own "thin use-case" framing
+    // assumed (brick/ingot going from "at least somewhat thin" to
+    // "literally zero uses"), but the developer explicitly chose
+    // cost-increase-only, not a new-use-case fix, this pass. This test
+    // exists so that fact stays verified/visible rather than silently
+    // drifting further without anyone noticing.
+    const consumesResource = (resId) => RECIPES.some(r => resId in r.cost);
+    assert.equal(consumesResource('brick'), false, 'brick should currently have no consumers -- if this now fails, a consumer was added and this comment/test should be updated to reflect it');
+    assert.equal(consumesResource('ingot'), false, 'ingot should currently have no consumers -- if this now fails, a consumer was added and this comment/test should be updated to reflect it');
+    assert.equal(consumesResource('plank'), true, 'plank DOES have exactly one consumer (Boots) -- sanity check that the assertion style above is actually discriminating, not vacuously true for every item');
   });
 
   test('dungeon_key recipe matches the ACTUAL shipped cost, a deliberate developer-requested deviation from design.md\'s original suggestion', () => {
@@ -80,16 +118,16 @@ describe('crafting.js', () => {
   test('canAffordRecipe checks raw-resource cost and inventory-item cost independently', () => {
     const resources = createResourceState();
     const inventory = createInventoryState();
-    // Boots needs { plank: 3, feathers: 5 } — feathers is a raw
+    // Boots needs { plank: 6, feathers: 15 } — feathers is a raw
     // resource, plank is a crafted item. Neither alone is enough.
-    resources.carried.feathers = 5;
+    resources.carried.feathers = 15;
     assert.equal(canAffordRecipe(resources, inventory, getRecipeById('boots')), false, 'missing plank should still block it');
 
-    inventory.plank = 3;
+    inventory.plank = 6;
     resources.carried.feathers = 0;
     assert.equal(canAffordRecipe(resources, inventory, getRecipeById('boots')), false, 'missing feathers should still block it');
 
-    resources.carried.feathers = 5;
+    resources.carried.feathers = 15;
     assert.equal(canAffordRecipe(resources, inventory, getRecipeById('boots')), true, 'both parts satisfied should afford it');
   });
 
@@ -98,10 +136,13 @@ describe('crafting.js', () => {
     const inventory = createInventoryState();
     assert.deepEqual(getCraftableRecipes(resources, inventory), []);
 
-    resources.carried.rice = 5;
+    resources.carried.rice = 35; // chicken_feed's actual (rebalanced) cost
     const craftable = getCraftableRecipes(resources, inventory);
-    assert.equal(craftable.length, 1);
-    assert.equal(craftable[0].id, 'chicken_feed');
+    // heal_potion (rice: 10, cheaper) also becomes affordable at this
+    // rice amount -- any quantity that unlocks chicken_feed (35)
+    // necessarily also unlocks heal_potion (10), so the correct
+    // expectation is both, not "only chicken_feed".
+    assert.deepEqual(craftable.map(r => r.id).sort(), ['chicken_feed', 'heal_potion']);
   });
 
   test('craftSpecific spends resources and increments inventory count', () => {
@@ -123,16 +164,16 @@ describe('crafting.js', () => {
     const resources = createResourceState();
     resources.carried.wood = 5;
     const inventory = createInventoryState();
-    craftSpecific(resources, inventory, 'plank'); // inventory.plank = 1, not enough for Boots yet
+    craftSpecific(resources, inventory, 'plank'); // inventory.plank = 1, not enough for Boots yet (needs 6)
 
-    resources.carried.feathers = 5;
-    assert.equal(craftSpecific(resources, inventory, 'boots'), false, 'only 1 plank on hand, Boots needs 3');
+    resources.carried.feathers = 15;
+    assert.equal(craftSpecific(resources, inventory, 'boots'), false, 'only 1 plank on hand, Boots needs 6');
     assert.equal(inventory.boots, undefined);
 
-    inventory.plank = 3;
+    inventory.plank = 6;
     const result = craftSpecific(resources, inventory, 'boots');
     assert.equal(result, true);
-    assert.equal(inventory.plank, 0, 'the 3 plank should be consumed, not just checked');
+    assert.equal(inventory.plank, 0, 'the 6 plank should be consumed, not just checked');
     assert.equal(inventory.boots, 1);
     assert.equal(resources.carried.feathers, 0);
   });

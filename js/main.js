@@ -161,7 +161,17 @@ const ITEM_CONFIG = {
   plank: { icon: '🪵' }, brick: { icon: '🧱' }, ingot: { icon: '🔩' },
   sword: { icon: '⚔️' }, bow: { icon: '🏹' }, staff: { icon: '🪄' },
   armor: { icon: '🛡️' }, boots: { icon: '👢' }, heal_potion: { icon: '🧪' },
-  dungeon_key: { icon: '🗝️' }
+  dungeon_key: { icon: '🗝️' },
+  // 'gems' isn't a crafted inventory item (it lives on gameState.gems,
+  // not gameState.inventory) but is looked up through this same
+  // iconFor()/nameFor() map by the Lucky Wheel's reward-branch code
+  // (wheel segment label AND win popup), the same way 'hero'/
+  // dungeon_key/etc. already are. Without an entry here, iconFor('gems')
+  // silently fell through to the '❔' fallback — a real, always-visible
+  // bug (the gems wheel segment showed a question mark on every page
+  // load, not just an edge case), found while cross-checking this
+  // exact code path for the gems-currency spec write-up.
+  gems: { icon: '💎' }
 };
 
 function iconFor(id) {

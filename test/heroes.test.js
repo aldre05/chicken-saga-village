@@ -33,7 +33,10 @@ import {
   unequipHero,
   canUseHealPotion,
   useHealPotion,
-  grantXp
+  grantXp,
+  HERO_ROLL_GEM_COST,
+  canBuyHeroRollWithGems,
+  buyHeroRollWithGems
 } from '../js/heroes.js';
 import { createResourceState } from '../js/resources.js';
 
@@ -592,6 +595,67 @@ describe('heroes.js', () => {
       const result = useHealPotion(hero, {});
       assert.equal(result, false);
       assert.equal(hero.currentHp, 10);
+    });
+  });
+
+  describe('buyHeroRollWithGems (add-gems-currency)', () => {
+    test('canBuyHeroRollWithGems / buyHeroRollWithGems reject at 1 gem below cost, succeed exactly at cost', () => {
+      const roster = createHeroRosterState();
+      const short = { gems: HERO_ROLL_GEM_COST - 1 };
+      assert.equal(canBuyHeroRollWithGems(short), false);
+      assert.equal(buyHeroRollWithGems(short, roster), null);
+      assert.equal(roster.roster.length, 0, 'a rejected purchase must not add a hero');
+
+      const exact = { gems: HERO_ROLL_GEM_COST };
+      assert.equal(canBuyHeroRollWithGems(exact), true);
+      const hero = buyHeroRollWithGems(exact, roster);
+      assert.ok(hero, 'a successful purchase should return the newly created hero object');
+      assert.equal(exact.gems, 0);
+      assert.equal(roster.roster.length, 1);
+      assert.equal(roster.roster[0], hero, 'the exact same object should be both returned and pushed onto the roster');
+    });
+
+    test('buyHeroRollWithGems deducts exactly HERO_ROLL_GEM_COST, no more no less', () => {
+      const gemsState = { gems: HERO_ROLL_GEM_COST + 250 };
+      const roster = createHeroRosterState();
+      buyHeroRollWithGems(gemsState, roster);
+      assert.equal(gemsState.gems, 250);
+    });
+
+    test('buyHeroRollWithGems\'s returned hero has the correct fresh-hero shape (DELIBERATE DEVIATION from design.md\'s snippet, which returns a bare true)', () => {
+      const gemsState = { gems: HERO_ROLL_GEM_COST };
+      const roster = createHeroRosterState();
+      const hero = buyHeroRollWithGems(gemsState, roster);
+      assert.equal(hero.level, 1);
+      assert.equal(hero.xp, 0);
+      assert.equal(hero.busyUntil, null);
+      assert.equal(hero.dungeonTier, null);
+      assert.ok(['common', 'rare', 'epic'].includes(hero.rarity));
+      assert.ok(HERO_CLASS_IDS.includes(hero.class));
+      assert.equal(hero.currentHp, getMaxHp(hero));
+      assert.deepEqual(hero.equipment, { weapon: null, armor: null, boots: null });
+    });
+
+    test('buyHeroRollWithGems is a genuinely separate paid path from recruitHero -- does not touch RECRUIT_COST/resources at all', () => {
+      const gemsState = { gems: HERO_ROLL_GEM_COST };
+      const roster = createHeroRosterState();
+      // Deliberately no resources funded -- if this accidentally also
+      // charged RECRUIT_COST it would fail here.
+      const hero = buyHeroRollWithGems(gemsState, roster);
+      assert.ok(hero, 'a gems-funded purchase must succeed even with zero egg/feathers on hand');
+    });
+
+    test('buyHeroRollWithGems never goes negative on gems even across repeated affordable purchases', () => {
+      const gemsState = { gems: HERO_ROLL_GEM_COST * 2 };
+      const roster = createHeroRosterState();
+      assert.ok(buyHeroRollWithGems(gemsState, roster));
+      assert.ok(buyHeroRollWithGems(gemsState, roster));
+      assert.equal(gemsState.gems, 0);
+      assert.equal(roster.roster.length, 2);
+      // A 3rd purchase with 0 gems left must fail, not go negative.
+      assert.equal(buyHeroRollWithGems(gemsState, roster), null);
+      assert.equal(gemsState.gems, 0);
+      assert.equal(roster.roster.length, 2);
     });
   });
 });
